@@ -54,7 +54,6 @@ Build from the repository root with PyInstaller:
 ./.venv/bin/pyinstaller --name aoto-md --onedir --clean --paths src src/cli.py
 ```
 
-
 The executable will be created under `dist/aoto-md/`.
 
 Run it on Linux with:
