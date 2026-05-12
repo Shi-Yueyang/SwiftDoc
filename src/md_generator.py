@@ -2,26 +2,36 @@ import json
 import os
 import argparse
 
-def generate_function_md(functions_json, types_json, figures_dir, output_dir="MD"):
+def generate_function_md(functions_json=None, function_list=None, types_json=None, figures_dir=None, output_dir="MD"):
     """
     生成 Markdown 文档。
 
     Args:
-        functions_json: 函数 JSON 文件路径（必填）
+        functions_json: 函数 JSON 文件路径（当 function_list 为 None 时必填）
+        function_list: 函数列表（可选，若提供则忽略 functions_json）
         types_json: 类型定义 JSON 文件路径（必填）
-        output_dir: MD 文档输出目录（默认 "MD"）
         figures_dir: 调用关系图所在目录（必填，用于生成图片相对路径）
+        output_dir: MD 文档输出目录（默认 "MD"）
     """
+    # 获取函数列表
+    if function_list is not None:
+        functions = function_list
+    else:
+        if functions_json is None:
+            raise ValueError("Either functions_json or function_list must be provided")
+        with open(functions_json, "r", encoding="utf-8") as f:
+            func_data = json.load(f)
+        functions = func_data.get("functions", [])
 
-    with open(functions_json, "r", encoding="utf-8") as f:
-        func_data = json.load(f)
-    functions = func_data.get("functions", [])
-
+    # 加载类型定义（必须）
+    if types_json is None:
+        raise ValueError("types_json must be provided")
     with open(types_json, "r", encoding="utf-8") as f:
         type_data = json.load(f)
     type_defs = type_data.get("type_definitions", {})
     type_refs = type_data.get("type_references", {})
 
+    # 构建类型描述映射
     type_desc_map = {}
     for tname, info in type_defs.items():
         if isinstance(info, dict):
@@ -112,14 +122,14 @@ def generate_function_md(functions_json, types_json, figures_dir, output_dir="MD
 
         # 算法和逻辑
         algo = func.get("algorithm_logic", "")
-        if not algo:
-            algo = "无"
         md_lines.append("## 算法和逻辑")
         md_lines.append(algo)
         md_lines.append("")
 
         # 接口（调用关系图）
         img_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_") + ".png"
+        if figures_dir is None:
+            raise ValueError("figures_dir must be provided")
         img_abs_path = os.path.join(figures_dir, img_name)
         rel_img_path = os.path.relpath(img_abs_path, start=output_dir)
         md_lines.append("## 接口")
@@ -131,7 +141,6 @@ def generate_function_md(functions_json, types_json, figures_dir, output_dir="MD
         md_path = os.path.join(output_dir, f"{safe_name}.md")
         with open(md_path, "w", encoding="utf-8") as f:
             f.write("\n".join(md_lines))
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="生成函数文档 Markdown 文件")

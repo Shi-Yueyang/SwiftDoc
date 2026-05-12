@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aoto-md"
+version = "0.1.0"
+description = "C/C++ analysis CLI that generates graphs and markdown docs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "chardet==7.4.3",
+  "matplotlib==3.10.9",
+  "openai==2.32.0",
+  "tree-sitter==0.25.2",
+  "tree-sitter-c==0.24.1",
+  "socksio==1.0.0",
+]
+
+[project.scripts]
+aoto-md = "cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = [
+  "cli",
+  "ai_utils",
+  "appendix_generate",
+  "extract_globals",
+  "extract_types",
+  "image_generator",
+  "md_generator",
+  "module_analysis",
+  "utils",
+]

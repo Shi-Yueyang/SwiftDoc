@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/ai_utils.py
+src/appendix_generate.py
+src/cli.py
+src/extract_globals.py
+src/extract_types.py
+src/image_generator.py
+src/md_generator.py
+src/module_analysis.py
+src/utils.py
+src/aoto_md.egg-info/PKG-INFO
+src/aoto_md.egg-info/SOURCES.txt
+src/aoto_md.egg-info/dependency_links.txt
+src/aoto_md.egg-info/entry_points.txt
+src/aoto_md.egg-info/requires.txt
+src/aoto_md.egg-info/top_level.txt

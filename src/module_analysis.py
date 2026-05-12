@@ -1,4 +1,3 @@
-
 """
 Module Analysis Tool for C files.
 
@@ -19,6 +18,7 @@ import tree_sitter_c
 from tree_sitter import Language, Parser
 from utils import get_node_text, find_identifier
 from ai_utils import ai_prompt_for_function, call_ai
+from version_diff import generate_versioned_filename, compare_functions, load_previous_functions
 
 C_LANGUAGE = Language(tree_sitter_c.language())
 parser = Parser(C_LANGUAGE)
@@ -48,6 +48,7 @@ def find_parameters(declarator_node):
             params.append({"name": param_name, "type": param_type})
     return params
 
+
 #提取return语句
 def find_return_statements(func_body_node):
     returns = []
@@ -67,6 +68,7 @@ def find_return_statements(func_body_node):
                 stack.append(child)
     return returns
 
+
 #提取全局变量对应类型
 def get_type_ref(type_str, type_refs):
     import re
@@ -78,6 +80,7 @@ def get_type_ref(type_str, type_refs):
     if type_str in type_refs:
         return type_refs[type_str]
     return None
+
 
 #分辨全局变量数据方向
 def is_identifier_written(node):
@@ -93,6 +96,7 @@ def is_identifier_written(node):
         if operand and find_identifier(operand) == node:
             return True
     return False
+
 
 #提取函数调用关系
 def extract_calls_from_body(body_node):
@@ -112,7 +116,48 @@ def extract_calls_from_body(body_node):
             stack.append(child)
     return list(called)
 
+
 #提取函数
+#body_code部分（用于ai分析）
+def clean_function_body(body_code):
+    """
+    清理函数体，去掉注释、\t 和 \n。
+    """
+    # 去掉单行注释
+    body_code = re.sub(r'//.*', '', body_code)
+    # 去掉多行注释
+    body_code = re.sub(r'/\*.*?\*/', '', body_code, flags=re.DOTALL)
+    # 去掉多余的空白字符和换行符
+    body_code = body_code.replace('\t', '').replace('\n', '').strip()
+    return body_code
+#normalized_body部分（用于对比代码改动）
+def normalize_c_code(code: str) -> str:
+    """
+    规范化C代码：去除注释和所有空白字符（空格、制表符、换行等），
+    但保护字符串和字符常量不变。用于机器对比。
+    """
+    if not code:
+        return ""
+    # 保护字符串和字符常量
+    placeholders = []
+    def repl(match):
+        placeholders.append(match.group(0))
+        return f'\x00STR{len(placeholders)-1}\x00'
+    # 匹配双引号字符串（支持转义）
+    code = re.sub(r'"(?:\\.|[^"\\])*"', repl, code)
+    # 匹配单引号字符常量
+    code = re.sub(r"'(?:\\.|[^'\\])*'", repl, code)
+    # 去除多行注释 /* ... */
+    code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
+    # 去除单行注释 // ...
+    code = re.sub(r'//.*', '', code)
+    # 去除所有空白字符
+    code = re.sub(r'\s+', '', code)
+    # 恢复字符串和字符常量
+    for i, s in enumerate(placeholders):
+        code = code.replace(f'\x00STR{i}\x00', s)
+    return code
+
 def extract_functions_from_c_file(c_file_path, type_refs, all_globals):
     """
     Parse a single .c file and return a list of information for all functions in the file.
@@ -146,6 +191,9 @@ def extract_functions_from_c_file(c_file_path, type_refs, all_globals):
                     body_code = full_body_text[1:-1].strip()
                 else:
                     body_code = full_body_text.strip()
+                body_code = clean_function_body(body_code)
+            
+            normalized_body = normalize_c_code(body_code) if body_code else ""
 
             params = find_parameters(declarator_node)
             inputs = []
@@ -199,54 +247,66 @@ def extract_functions_from_c_file(c_file_path, type_refs, all_globals):
                 "inputs": inputs,
                 "returns": return_exprs,
                 "body_code": body_code,
+                "normalized_body": normalized_body,
                 "calls": calls
             })
     return functions
 
+
 #ai分析函数
-def enhance_functions_with_ai(all_functions, type_descriptions):
-    for func in all_functions:
-        if isinstance(func['returns'], list) and len(func['returns']) > 0 and isinstance(func['returns'][0], str):
+def enhance_functions_with_ai(func_list, type_descriptions=None):
+    """
+    对给定的函数列表进行 AI 分析增强。
+    参数:
+        func_list: 函数字典列表（每个字典应包含 name, inputs, returns, body_code 等字段）
+        type_descriptions: 字典，类型名 -> 类型描述，若为 None 则尝试从 types_json 加载
+    返回:
+        修改后的函数列表（原地修改）
+    """
+
+    for func in func_list:
+        if isinstance(func.get('returns'), list) and func['returns'] and isinstance(func['returns'][0], str):
             func['returns'] = [{"expression": expr, "return_description": ""} for expr in func['returns']]
         else:
-            for ret in func['returns']:
+            for ret in func.get('returns', []):
                 if 'return_description' not in ret:
                     ret['return_description'] = ""
 
-        for inp in func['inputs']:
+        for inp in func.get('inputs', []):
             if 'inputs_description' not in inp:
                 inp['inputs_description'] = ""
 
         prompt = ai_prompt_for_function(func)
-        response = call_ai(prompt)
+        response = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
+        print(f"AI raw response for {func['name']}:\n{response}\n")
         if response:
             try:
                 desc = json.loads(response)
                 func['algorithm_logic'] = desc.get('algorithm_logic', '')
-
                 param_descs = {item['name']: item.get('inputs_description', '') for item in desc.get('inputs_description', [])}
                 for inp in func['inputs']:
                     inp['inputs_description'] = param_descs.get(inp['name'], inp.get('inputs_description', ''))
-
                 return_descs = desc.get('return_values', [])
                 for idx, ret_item in enumerate(func['returns']):
                     if idx < len(return_descs):
                         ret_item['return_description'] = return_descs[idx]
                     else:
                         ret_item['return_description'] = ''
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"JSON 解析失败: {e}")
                 func['algorithm_logic'] = "AI 分析失败"
         else:
             func['algorithm_logic'] = "AI 分析失败"
 
-        for inp in func['inputs']:
+        for inp in func.get('inputs', []):
             if inp['kind'] == 'Global variable':
                 base_type_match = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\b', inp['type'])
                 base_type = base_type_match.group(1) if base_type_match else inp['type']
                 inp['type_description'] = type_descriptions.get(base_type, "")
 
         time.sleep(0.5)
-    return all_functions
+    return func_list
+
 
 #加载类型描述
 def load_type_descriptions(types_json_path):
@@ -270,27 +330,48 @@ def load_type_descriptions(types_json_path):
     
     return type_descs
 
+
 #分析c文件
-def analyze_project_c_files(project_dir, types_json_path, globals_json_path, output_json_path, enable_ai=True):
+def analyze_project_c_files(project_dir, types_json_path, globals_json_path, output_json_path, enable_ai=True, enable_version_control=True, file_filter=None):
+    """
+    分析项目中的所有 .c 文件，提取函数签名、调用关系等。
+    
+    参数:
+        project_dir: 项目根目录
+        types_json_path: 类型定义 JSON 文件路径（包含 type_references）
+        globals_json_path: 全局变量 JSON 文件路径
+        output_json_path: 输出 JSON 文件路径
+        enable_ai: 是否启用 AI 增强（若为 False，则完全保留原始提取数据）
+        enable_version_control: 是否启用版本管理（自动生成版本号并对比差异），默认 True
+        file_filter: 可选，指定只分析某个 .c 文件（绝对路径或相对路径）
+    """
     with open(types_json_path, 'r', encoding='utf-8') as f:
         types_data = json.load(f)
         type_refs = types_data.get("type_references", {})
-    type_descriptions = load_type_descriptions(types_json_path)
+    
+    type_descriptions = load_type_descriptions(types_json_path) if enable_ai else {}
 
     with open(globals_json_path, 'r', encoding='utf-8') as f:
         globals_data = json.load(f)
         all_globals = {g["name"]: g for g in globals_data.get("globals", [])}
-
+    
     c_files = []
     for root, _, files in os.walk(project_dir):
         for f in files:
             if f.endswith('.c'):
-                c_files.append(os.path.join(root, f))
-
+                full_path  = os.path.join(root, f)
+                if file_filter:
+                    if os.path.samefile(full_path, file_filter):
+                        c_files.append(full_path)
+                        break  
+                else:
+                    c_files.append(full_path)
+    
     if not c_files:
         print(f"No .c files found in {project_dir}")
         return
-
+    
+    # 提取原始函数信息（无 AI 字段）
     all_functions = []
     name_to_funcs = {}
     for cf in c_files:
@@ -299,7 +380,8 @@ def analyze_project_c_files(project_dir, types_json_path, globals_json_path, out
             all_functions.append(func)
             name = func["name"]
             name_to_funcs.setdefault(name, []).append(func)
-
+    
+    # 构建调用关系 called_by（谁调用了当前函数）
     called_by_map = {}
     for func in all_functions:
         caller = func["name"]
@@ -310,31 +392,44 @@ def analyze_project_c_files(project_dir, types_json_path, globals_json_path, out
         called_by_map[callee] = list(set(callers))
     for func in all_functions:
         func["called_by"] = called_by_map.get(func["name"], [])
-
+    
+    # 根据 enable_ai 决定是否添加 AI 增强字段
     if enable_ai:
         all_functions = enhance_functions_with_ai(all_functions, type_descriptions)
     else:
-        for func in all_functions:
-            if isinstance(func['returns'], list) and len(func['returns']) > 0 and isinstance(func['returns'][0], str):
-                func['returns'] = [{"expression": expr, "return_description": ""} for expr in func['returns']]
-        else:
-            for ret in func['returns']:
-                if 'return_description' not in ret:
-                    ret['return_description'] = ""
-        for inp in func['inputs']:
-            inp['inputs_description'] = ""
-            if inp['kind'] == 'Global variable':
-                base_type_match = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\b', inp['type'])
-                base_type = base_type_match.group(1) if base_type_match else inp['type']
-                inp['type_description'] = type_descriptions.get(base_type, "")
+        pass
 
-    os.makedirs(os.path.dirname(output_json_path), exist_ok=True)
+    # 根据 enable_version_control 决定是否对比新旧代码
+    if enable_version_control:
+        old_functions = load_previous_functions(output_json_path)
+        if old_functions:
+            print(f"Found previous version: {output_json_path}")
+            final_output_path = generate_versioned_filename(output_json_path)
+        else:
+            final_output_path = output_json_path
+    else:
+        old_functions = []
+        final_output_path = output_json_path
+    
+    os.makedirs(os.path.dirname(final_output_path), exist_ok=True)
     output_data = {"functions": all_functions}
-    with open(output_json_path, 'w', encoding='utf-8') as f:
+    with open(final_output_path, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
-    print(f"All functions saved to {output_json_path}")
+    print(f"All functions saved to {final_output_path}")
     print(f"Total functions: {len(all_functions)}")
-    return output_json_path
+
+    if enable_version_control and old_functions:
+        diff = compare_functions(old_functions, all_functions)
+        diff_path = os.path.join(os.path.dirname(final_output_path), "functions_diff.json")
+        with open(diff_path, 'w', encoding='utf-8') as f:
+            json.dump(diff, f, indent=2, ensure_ascii=False)
+        print(f"Diff report saved to {diff_path}")
+        print(f"  Added: {len(diff['added'])} functions")
+        print(f"  Modified: {len(diff['modified'])} functions")
+        print(f"  Removed: {len(diff['removed'])} functions")
+
+    return final_output_path
+
 
 def main():
     parser = argparse.ArgumentParser(description="Extract all functions from a C project.")

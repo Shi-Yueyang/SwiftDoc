@@ -1,40 +1,40 @@
 # aoto_md
 
-## Quick Start
+## CLI Usage
 
 ```bash
-pip install -r requirements.txt
-python src/main.py ATP_CODE/INIT --cache-dir .analysis --output_folder MD --output_format md --ai off
+python src/cli.py root_dir [--analyse_dir ANALYSE_DIR] [--cache_dir CACHE_DIR] [--output_folder OUTPUT_FOLDER] [--ai {on,off}]
 ```
 
-## Re-run
+### Positional Argument
+
+- `root_dir` (required): module directory or a single `.c` file for documentation generation.
+
+### Optional Arguments
+
+- `--analyse_dir`: analysis scope under `root_dir` for extract phase. If omitted, defaults to `root_dir`.
+- `--cache_dir`: cache directory for intermediate JSON files. Default: `.analysis`.
+- `--output_folder`: output directory for markdown and figures. Default: `out`.
+- `--ai`: AI mode for doc generation updates. Choices: `on` or `off`. Default: `on`.
+
+## Examples
 
 ```bash
-python src/main.py ATP_CODE/INIT --cache-dir .analysis --output_folder MD --output_format md --ai off
-```
-
-## Run with AI
-
-```bash
-python src/main.py ATP_CODE/INIT --cache-dir .analysis --output_folder MD --output_format md --ai on
-```
-
-## Environment Setup Examples
-
-```bash
-# venv
-python3 -m venv .venv
-source .venv/bin/activate
+# Use root_dir for both extraction and doc generation
+python src/cli.py ATP_CODE/INIT
 ```
 
 ```bash
-# conda
-conda create -n aoto_md python=3.11 -y
-conda activate aoto_md
+# Analyse a subdirectory inside root_dir
+python src/cli.py ATP_CODE --analyse_dir ATP_CODE/INIT
 ```
 
 ```bash
-# pipenv
-pipenv --python 3.11
-pipenv shell
+# Disable AI updates during doc generation
+python src/cli.py ATP_CODE/INIT --ai off
+```
+
+```bash
+# Custom cache and output directories
+python src/cli.py ATP_CODE/INIT --cache_dir .analysis --output_folder MD
 ```

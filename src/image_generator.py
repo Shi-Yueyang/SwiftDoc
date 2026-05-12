@@ -8,13 +8,32 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-def generate_function_graphs(json_path, output_dir=".analysis/figures"):
 
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    functions = data.get("functions", [])
+
+def generate_function_graphs(json_path=None, output_dir=".analysis/figures", function_list=None):
+    """
+    生成函数调用关系图。
+
+    参数:
+        json_path: JSON 文件路径（当 function_list 为 None 时必填）
+        output_dir: 输出图片目录
+        function_list: 可选，函数列表（每个函数应包含 name, called_by, calls 字段）
+    """
+    # 获取函数列表
+    if function_list is not None:
+        functions = function_list
+    else:
+        if json_path is None:
+            raise ValueError("Either json_path or function_list must be provided")
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        functions = data.get("functions", [])
+        if not functions:
+            print("错误：JSON 中没有找到 functions 数据")
+            return
+
     if not functions:
-        print("错误：JSON 中没有找到 functions 数据")
+        print("错误：没有函数数据可生成图表")
         return
 
     os.makedirs(output_dir, exist_ok=True)
@@ -23,7 +42,7 @@ def generate_function_graphs(json_path, output_dir=".analysis/figures"):
     plt.rcParams['axes.unicode_minus'] = False
 
     for idx, func in enumerate(functions, 1):
-        fname = func["name"]
+        fname = func.get("name", "unknown")
         callers = func.get("called_by", [])
         callees = func.get("calls", [])
 
@@ -77,7 +96,7 @@ def generate_function_graphs(json_path, output_dir=".analysis/figures"):
             ax.add_patch(rect)
             ax.text(x, y, node, ha='center', va='center', fontsize=10)
 
-       # -------------------------- 左侧箭头（红色：分支→总线→中间） --------------------------
+        # -------------------------- 左侧箭头（红色：分支→总线→中间） --------------------------
         if callers:
             for c in callers:
                 x0, y0 = pos[c]
@@ -125,12 +144,13 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="生成函数调用关系图")
     parser.add_argument("--json", "-j", default=".analysis/INIT_functions.json",
-                        help="INIT_functions.json 文件路径（默认 .analysis/INIT_functions.json）")
+                        help="functions.json 文件路径（默认 .analysis/INIT_functions.json）")
     parser.add_argument("--output", "-o", default=".analysis/figures",
                         help="输出图片目录（默认 .analysis/figures）")
     args = parser.parse_args()
 
-    generate_function_graphs(args.json, args.output)
+    generate_function_graphs(json_path=args.json, output_dir=args.output)
+
 
 if __name__ == "__main__":
     main()

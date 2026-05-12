@@ -1,0 +1,53 @@
+Metadata-Version: 2.4
+Name: aoto-md
+Version: 0.1.0
+Summary: C/C++ analysis CLI that generates graphs and markdown docs
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: chardet==7.4.3
+Requires-Dist: matplotlib==3.10.9
+Requires-Dist: openai==2.32.0
+Requires-Dist: tree-sitter==0.25.2
+Requires-Dist: tree-sitter-c==0.24.1
+Requires-Dist: socksio==1.0.0
+
+# aoto_md
+
+## Quick Start
+
+```bash
+pip install -r requirements.txt
+python src/cli.py ATP_CODE/INIT --cache-dir .analysis --output_folder MD --output_format md --ai off
+```
+
+## Re-run
+
+```bash
+python src/cli.py ATP_CODE/INIT --cache-dir .analysis --output_folder MD --output_format md --ai off
+```
+
+## Run with AI
+
+```bash
+python src/cli.py ATP_CODE/INIT --cache-dir .analysis --output_folder MD --output_format md --ai on
+```
+
+## Environment Setup Examples
+
+```bash
+# venv
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+```bash
+# conda
+conda create -n aoto_md python=3.11 -y
+conda activate aoto_md
+```
+
+```bash
+# pipenv
+pipenv --python 3.11
+pipenv shell
+```

@@ -21,14 +21,18 @@ def _load_dotenv(dotenv_path):
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _load_dotenv(PROJECT_ROOT / ".env")
 
-AI_API_KEY = os.getenv("AI_API_KEY", "")
-AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.moonshot.cn/v1")
-MODEL_NAME = os.getenv("AI_MODEL_NAME", "kimi-k2.5")
+AI_API_KEY = os.getenv("AI_API_KEY")
+AI_BASE_URL = os.getenv("AI_BASE_URL")
+MODEL_NAME = os.getenv("AI_MODEL_NAME")
 
 
 def _get_client():
     if not AI_API_KEY:
         raise RuntimeError("AI_API_KEY is not set. Please configure it in .env or environment variables.")
+    if not AI_BASE_URL:
+        raise RuntimeError("AI_BASE_URL is not set. Please configure it in .env or environment variables.")
+    if not MODEL_NAME:
+        raise RuntimeError("AI_MODEL_NAME is not set. Please configure it in .env or environment variables.")
     return OpenAI(base_url=AI_BASE_URL, api_key=AI_API_KEY)
 
 
@@ -123,7 +127,7 @@ def ai_prompt_for_function(func):
     return prompt
 
 
-def call_ai(prompt, temperature=1.0, max_tokens=300, retry_count=1):
+def call_ai(prompt, temperature, max_tokens, retry_count):
     """
     调用 AI 接口，如果返回内容为空，则等待 2 秒后重试一次。
 

@@ -9,10 +9,11 @@ import json
 import time
 import argparse
 from utils import decode_file
+from version_diff import compare_types, generate_versioned_filename
 from ai_utils import ai_prompt_for_type, call_ai
 
 
-def collect_type_definitions_with_comments(header_text):
+def collect_type_definitions_with_comments(header_text, source_file):
     """
     Extract valid type definitions (not inside comments) and associate preceding comments.
     Supported patterns:
@@ -65,13 +66,24 @@ def collect_type_definitions_with_comments(header_text):
             elif kind in ('struct', 'union'):
                 body, name = match.groups()
                 members = [m.strip() + ';' for m in body.split(';') if m.strip()]
-                definition = {"kind": kind, "name": name, "members": members}
+                if len(members) == 1:
+                    member = members[0].rstrip(';')
+                    if re.search(r'\[[^\]]+\]', member):
+                        orig_type = member
+                        definition = {"kind": "typedef", "name": name, "original_type": orig_type}
+                    else:
+                        definition = {"kind": kind, "name": name, "members": members}
+                else:
+                    definition = {"kind": kind, "name": name, "members": members}
             elif kind == 'array':
                 orig, name, array_size = match.groups()
                 definition = {"kind": "typedef", "name": name, "original_type": orig.strip() + f"[{array_size}]"}
             else:  # typedef
                 orig, name = match.groups()
                 definition = {"kind": "typedef", "name": name, "original_type": orig.strip()}
+            if kind in ('array', 'typedef') and ('struct' in definition.get('original_type', '') or '{' in definition.get('original_type', '')):
+                continue
+            
             matches.append((start, end, name, definition))
 
     matches.sort(key=lambda x: x[0])
@@ -100,11 +112,13 @@ def collect_type_definitions_with_comments(header_text):
             definition['comment'] = cleaned
         else:
             definition['comment'] = None
+
+        definition['source_file'] = source_file
         type_defs[name] = definition
 
     return type_defs
 
-def collect_all_types_from_project(project_dir, output_dir=".analysis", enable_ai=True):
+def collect_all_types_from_project(project_dir, output_dir=".analysis", enable_ai=True, enable_version_control=True):
     """
     Extract type definitions from all .h files in the project directory, associate comments, and save to JSON.
     """
@@ -119,27 +133,48 @@ def collect_all_types_from_project(project_dir, output_dir=".analysis", enable_a
         with open(hf, 'rb') as f:
             raw = f.read()
         text = decode_file(raw) 
-        all_types.update(collect_type_definitions_with_comments(text))
+        all_types.update(collect_type_definitions_with_comments(text, hf))
 
     unique_types = {}
     for name, defn in all_types.items():
         if name not in unique_types:
             unique_types[name] = defn
         else:
-            print(f"Warning: duplicate type definition '{name}' ignored")
-
+            existing = unique_types[name]
+            if existing.get("kind") == "typedef" and defn.get("kind") != "typedef":
+                unique_types[name] = defn
+                print(f"Replacing typedef {name} with {defn['kind']}")
+            else:
+                print(f"Warning: duplicate type definition '{name}' ignored")
     sorted_names = sorted(unique_types.keys())
     type_refs = {name: f"A_{idx+1}" for idx, name in enumerate(sorted_names)}
 
-    if enable_ai:
-        for idx, (type_name, defn) in enumerate(unique_types.items(), 1):
-            prompt = ai_prompt_for_type(type_name, defn)
-            description = call_ai(prompt, max_tokens=300)
-            if description:
-                defn['type_description'] = description
-            else:
-                defn['type_description'] = "AI 分析失败"
-            time.sleep(0.5) 
+    folder_name = os.path.basename(os.path.normpath(project_dir))
+    output_file = os.path.join(output_dir, f"{folder_name}_global_types.json")
+    old_types = {}
+    diff = None
+    new_output_file = output_file
+
+    is_first_run = not os.path.exists(output_file)
+
+    if enable_version_control and not is_first_run:
+        with open(output_file, 'r', encoding='utf-8') as f:
+            old_data = json.load(f)
+            old_types = old_data.get("type_definitions", {})
+        print(f"Found previous types version: {output_file}")
+        new_output_file = generate_versioned_filename(output_file)
+        diff = compare_types(old_types, unique_types)
+
+    else:
+        if enable_ai: 
+            for type_name, defn in unique_types.items():  
+                prompt = ai_prompt_for_type(type_name, defn)
+                description = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
+                if description:
+                    defn['type_description'] = description
+                else:
+                    defn['type_description'] = "AI 分析失败"
+                time.sleep(0.5)
             
     output_data = {
         "description": "Type definitions extracted from project header files (excluding commented-out ones).",
@@ -150,11 +185,21 @@ def collect_all_types_from_project(project_dir, output_dir=".analysis", enable_a
     os.makedirs(output_dir, exist_ok=True)
     folder_name = os.path.basename(os.path.normpath(project_dir))
     output_file = os.path.join(output_dir, f"{folder_name}_global_types.json")
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(new_output_file, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
-    print(f"Type definitions saved to {output_file}")
+    print(f"Type definitions saved to {new_output_file}")
     print(f"Total types found: {len(unique_types)}")
-    return output_file
+
+    if enable_version_control and diff:
+        diff_path = os.path.join(os.path.dirname(new_output_file), "types_diff.json")
+        with open(diff_path, 'w', encoding='utf-8') as f:
+            json.dump(diff, f, indent=2, ensure_ascii=False)
+        print(f"Types diff report saved to {diff_path}")
+        print(f"  Added: {len(diff.get('added', {}))} types")
+        print(f"  Modified: {len(diff.get('modified', {}))} types")
+        print(f"  Removed: {len(diff.get('removed', {}))} types")
+        
+    return new_output_file  
 
 def main():
     parser = argparse.ArgumentParser(description="Extract type definitions from C/C++ header files.")
