@@ -1,7 +1,6 @@
 import os
 import json
 
-# 导入现有模块
 from extract_globals import extract_all_globals
 from extract_types import collect_all_types_from_project
 from image_generator import generate_function_graphs
@@ -14,16 +13,15 @@ from module_analysis import (
 
 
 def run_extract_phase(args):
-    """纯提取阶段：不调用函数AI，但调用类型AI生成类型描述"""
-    print("[Extract] Scanning entire project...")
+    print("Scanning root dir...")
     os.makedirs(args.cache_dir, exist_ok=True)
+    enable_ai = getattr(args, "ai", "on") == "on"
 
     source_path = os.path.normpath(args.source_dir)
     if os.path.isfile(source_path) and source_path.endswith('.c'):
         project_root = os.path.dirname(source_path)
         file_filter = source_path
-        print(f"  Input is a single file: {source_path}")
-        print(f"  Using project root: {project_root}")
+
     else:
         project_root = source_path
         file_filter = None
@@ -39,13 +37,21 @@ def run_extract_phase(args):
 
     # 2. 类型定义（调用AI生成类型描述）
     types_json = os.path.join(args.cache_dir, f"{folder_name}_global_types.json")
-    new_types_path = collect_all_types_from_project(project_root, args.cache_dir, enable_ai=True, enable_version_control=True)
+    new_types_path = collect_all_types_from_project(
+        project_root,
+        args.cache_dir,
+        enable_ai=enable_ai,
+        enable_version_control=True,
+    )
     diff_json_path = os.path.join(os.path.dirname(new_types_path), "types_diff.json")
     if os.path.exists(diff_json_path):
-        update_master_from_diff(types_json, diff_json_path, enable_ai=True)
+        update_master_from_diff(types_json, diff_json_path, enable_ai=enable_ai)
         print(f"  Master types JSON updated from diff.")
     else:
         print(f"  No types_diff.json found, skipping update.")
+
+    if not enable_ai:
+        print("  AI is disabled; type descriptions will not be generated during extract.")
 
     # 3. 函数签名（不调用函数AI）
     functions_json = os.path.join(args.cache_dir, f"{folder_name}_functions.json")

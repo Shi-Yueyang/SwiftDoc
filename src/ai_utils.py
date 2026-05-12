@@ -1,39 +1,21 @@
 import os
 import time
 from textwrap import dedent
-from pathlib import Path
 from openai import OpenAI
 
-
-def _load_dotenv(dotenv_path):
-    if not dotenv_path.exists():
-        return
-    for line in dotenv_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
-
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_load_dotenv(PROJECT_ROOT / ".env")
-
-AI_API_KEY = os.getenv("AI_API_KEY")
-AI_BASE_URL = os.getenv("AI_BASE_URL")
-MODEL_NAME = os.getenv("AI_MODEL_NAME")
-
+from config_manager import get_missing_ai_keys, resolve_ai_config
 
 def _get_client():
-    if not AI_API_KEY:
-        raise RuntimeError("AI_API_KEY is not set. Please configure it in .env or environment variables.")
-    if not AI_BASE_URL:
-        raise RuntimeError("AI_BASE_URL is not set. Please configure it in .env or environment variables.")
-    if not MODEL_NAME:
-        raise RuntimeError("AI_MODEL_NAME is not set. Please configure it in .env or environment variables.")
-    return OpenAI(base_url=AI_BASE_URL, api_key=AI_API_KEY)
+    config, details = resolve_ai_config()
+    missing_keys = get_missing_ai_keys(config)
+    if missing_keys:
+        missing_labels = ", ".join(missing_keys)
+        raise RuntimeError(
+            "AI configuration is incomplete. "
+            f"Missing: {missing_labels}. Checked {details['source_summary']}"
+        )
+    client = OpenAI(base_url=config["base_url"], api_key=config["api_key"])
+    return client, config["model_name"]
 
 
 def ai_prompt_for_type(type_name, definition):
@@ -137,9 +119,9 @@ def call_ai(prompt, temperature, max_tokens, retry_count):
         成功返回内容字符串，失败返回 None
     """
     try:
-        client = _get_client()
+        client, model_name = _get_client()
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
             max_tokens=max_tokens,

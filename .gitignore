@@ -16,6 +16,10 @@ env/
 .analysis/
 MD/
 ATP_CODE/
+build/
+dist/
+out/
+*.spec
 
 # Tool caches
 .pytest_cache/

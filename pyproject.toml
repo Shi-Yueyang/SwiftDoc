@@ -26,6 +26,7 @@ py-modules = [
   "cli",
   "ai_utils",
   "appendix_generate",
+  "config_manager",
   "extract_globals",
   "extract_types",
   "image_generator",

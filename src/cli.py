@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# analyze.py
+
 import argparse
+from config_manager import ensure_ai_config_interactive
 from pipeline import run_extract_phase, run_docgen_phase
 
 
@@ -38,8 +39,8 @@ def build_parser():
     parser.add_argument(
         "--ai",
         choices=["on", "off"],
-        default="on",
-        help="Enable AI for doc generation updates",
+        default="off",
+        help="Enable AI for type/function analysis and interactive onboarding when config is missing",
     )
     return parser
 
@@ -49,10 +50,14 @@ def main():
     cli_args = parser.parse_args()
     analyse_dir = cli_args.analyse_dir or cli_args.root_dir
 
+    if cli_args.ai == "on":
+        ensure_ai_config_interactive()
+
     #1. 提取阶段（不调用AI）
     extract_args = argparse.Namespace(
         source_dir=analyse_dir,
         cache_dir=cli_args.cache_dir,
+        ai=cli_args.ai,
     )
     run_extract_phase(extract_args)
 
