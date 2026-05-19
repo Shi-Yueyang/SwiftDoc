@@ -1,5 +1,5 @@
 """
-Extract type definitions (structs, unions, enums, typedefs) from all .h files in the specified folder, 
+Extract type definitions (structs, unions, enums, typedefs) from all .h files in the specified folder,
 exclude commented-out types, associate the preceding comments, and output a JSON file with the numbering format A_1, A_2, ...
 """
 
@@ -8,9 +8,202 @@ import re
 import json
 import time
 import argparse
-from utils import decode_file
-from version_diff import compare_types, generate_versioned_filename
+import logging
+import tempfile
+import copy
+from utils import decode_file, highlight_message
+from version_diff import compare_types
 from ai_utils import ai_prompt_for_type, call_ai
+
+logger = logging.getLogger(__name__)
+AI_RESULT_PREVIEW_CHARS = 24
+
+
+def load_previous_type_cache(cache_path):
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data.setdefault(
+                "description",
+                "Type definitions extracted from project header files (excluding commented-out ones).",
+            )
+            data.setdefault("type_definitions", {})
+            data.setdefault("type_references", {})
+            return data, cache_path
+        except (json.JSONDecodeError, OSError):
+            logger.warning("Failed to load previous type cache from %s", cache_path)
+
+    return {
+        "description": "Type definitions extracted from project header files (excluding commented-out ones).",
+        "type_definitions": {},
+        "type_references": {},
+    }, None
+
+
+def scan_project_types(project_dir):
+    h_files = []
+    for root, dirs, files in os.walk(project_dir):
+        for f in files:
+            if f.endswith(".h"):
+                h_files.append(os.path.join(root, f))
+
+    all_types = {}
+    for hf in h_files:
+        with open(hf, "rb") as f:
+            raw = f.read()
+        text = decode_file(raw)
+        all_types.update(collect_type_definitions_with_comments(text, hf))
+
+    unique_types = {}
+    for name, defn in all_types.items():
+        if name not in unique_types:
+            unique_types[name] = defn
+            continue
+
+        existing = unique_types[name]
+        if existing.get("kind") == "typedef" and defn.get("kind") != "typedef":
+            unique_types[name] = defn
+            logger.debug("Replacing typedef %s with %s", name, defn["kind"])
+        else:
+            logger.warning("Duplicate type definition '%s' ignored", name)
+
+    return unique_types
+
+
+def write_types_cache(cache_path, master_data):
+    master_types = master_data.get("type_definitions", {})
+    sorted_names = sorted(master_types.keys())
+    master_data["type_references"] = {
+        name: f"A_{idx+1}" for idx, name in enumerate(sorted_names)
+    }
+
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=os.path.dirname(cache_path), delete=False
+    ) as tmp_file:
+        json.dump(master_data, tmp_file, indent=2, ensure_ascii=False)
+        tmp_path = tmp_file.name
+    os.replace(tmp_path, cache_path)
+
+
+def enrich_type_definition(type_name, type_definition):
+    prompt = ai_prompt_for_type(type_name, type_definition)
+    description = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
+    if description:
+        type_definition["type_description"] = description
+        logger.debug("Generated AI description for type: %s", type_name)
+    else:
+        type_definition["type_description"] = "AI 分析失败"
+        logger.debug("Marked type as AI failed: %s", type_name)
+    return type_definition["type_description"]
+
+
+def summarize_ai_result(description):
+    normalized = " ".join(str(description).split())
+    success = normalized != "AI 分析失败"
+    preview = normalized[:AI_RESULT_PREVIEW_CHARS]
+    if len(normalized) > AI_RESULT_PREVIEW_CHARS:
+        preview = f"{preview}..."
+    return "success" if success else "failed", preview
+
+
+def is_missing_type_description(type_definition):
+    description = type_definition.get("type_description")
+    return not isinstance(description, str) or not description.strip()
+
+
+def refresh_type_definitions(project_dir, output_dir=".analysis", enable_ai=True):
+    folder_name = os.path.basename(os.path.normpath(project_dir))
+    cache_path = os.path.join(output_dir, f"{folder_name}_global_types.json")
+    previous_data, loaded_from = load_previous_type_cache(cache_path)
+    previous_types = previous_data.get("type_definitions", {})
+    fresh_types = scan_project_types(project_dir)
+    diff = compare_types(previous_types, fresh_types)
+
+    added = diff.get("added", {})
+    modified = diff.get("modified", {})
+    removed = diff.get("removed", {})
+    changed_names = sorted(set(added.keys()) | set(modified.keys()))
+    if enable_ai:
+        missing_description_names = {
+            type_name
+            for type_name, type_definition in fresh_types.items()
+            if is_missing_type_description(previous_types.get(type_name, {}))
+        }
+        changed_names = sorted(set(changed_names) | missing_description_names)
+
+    logger.debug(
+        "Type changes: added=%s modified=%s removed=%s",
+        len(added),
+        len(modified),
+        len(removed),
+    )
+
+    master_data = {
+        "description": "Type definitions extracted from project header files (excluding commented-out ones).",
+        "type_definitions": copy.deepcopy(previous_types),
+    }
+    master_types = master_data["type_definitions"]
+
+    for type_name in removed.keys():
+        if type_name in master_types:
+            del master_types[type_name]
+            logger.debug("Removed type: %s", type_name)
+
+    for type_name in changed_names:
+        fresh_definition = copy.deepcopy(
+            modified.get(type_name) or added.get(type_name) or fresh_types[type_name]
+        )
+        fresh_definition.pop("_old_preview", None)
+        if not enable_ai:
+            fresh_definition["type_description"] = ""
+            logger.debug("Left description empty for type without AI: %s", type_name)
+        master_types[type_name] = fresh_definition
+
+    should_persist_now = bool(
+        changed_names
+        or removed
+        or loaded_from != cache_path
+        or not os.path.exists(cache_path)
+    )
+
+    if enable_ai:
+        if changed_names:
+            logger.info(
+                highlight_message(
+                    "Refreshing AI descriptions for %s changed types"
+                ),
+                len(changed_names),
+            )
+        else:
+            logger.info(highlight_message("No types require AI refresh"))
+        for index, type_name in enumerate(changed_names, start=1):
+            description = enrich_type_definition(type_name, master_types[type_name])
+            status, preview = summarize_ai_result(description)
+            logger.info(
+                "AI progress %s/%s: %s [%s] %s",
+                index,
+                len(changed_names),
+                type_name,
+                status,
+                preview,
+            )
+            write_types_cache(cache_path, master_data)
+            time.sleep(0.15)
+    elif should_persist_now:
+        write_types_cache(cache_path, master_data)
+
+    if enable_ai and not changed_names and should_persist_now:
+        write_types_cache(cache_path, master_data)
+
+    logger.debug("Added: %s types", len(added))
+    logger.debug("Modified: %s types", len(modified))
+    logger.debug("Removed: %s types", len(removed))
+
+    logger.debug("Type definitions saved to %s", cache_path)
+    logger.debug("Total types found: %s", len(master_types))
+    return cache_path
 
 
 def collect_type_definitions_with_comments(header_text, source_file):
@@ -26,9 +219,9 @@ def collect_type_definitions_with_comments(header_text, source_file):
 
     """
     comment_spans = []
-    for match in re.finditer(r'/\*.*?\*/', header_text, re.DOTALL):
+    for match in re.finditer(r"/\*.*?\*/", header_text, re.DOTALL):
         comment_spans.append((match.start(), match.end(), match.group(0)))
-    for match in re.finditer(r'//.*?(?=\n|$)', header_text):
+    for match in re.finditer(r"//.*?(?=\n|$)", header_text):
         comment_spans.append((match.start(), match.end(), match.group(0)))
     comment_spans.sort(key=lambda x: x[0])
 
@@ -39,19 +232,31 @@ def collect_type_definitions_with_comments(header_text, source_file):
         return False
 
     type_defs = {}
-    matches = [] 
+    matches = []
 
     patterns = [
         # 1. typedef enum [tag] { ... } Name;
-        (r'typedef\s+enum\s+(?:\w+\s+)?\{([^}]*)\}\s*([A-Za-z][A-Za-z0-9_]*)\s*;', 'enum'),
+        (
+            r"typedef\s+enum\s+(?:\w+\s+)?\{([^}]*)\}\s*([A-Za-z][A-Za-z0-9_]*)\s*;",
+            "enum",
+        ),
         # 2. typedef struct [tag] { ... } Name;
-        (r'typedef\s+struct\s+(?:\w+\s+)?\{([^}]*)\}\s*([A-Za-z][A-Za-z0-9_]*)\s*;', 'struct'),
+        (
+            r"typedef\s+struct\s+(?:\w+\s+)?\{([^}]*)\}\s*([A-Za-z][A-Za-z0-9_]*)\s*;",
+            "struct",
+        ),
         # 3. typedef union [tag] { ... } Name;
-        (r'typedef\s+union\s+(?:\w+\s+)?\{([^}]*)\}\s*([A-Za-z][A-Za-z0-9_]*)\s*;', 'union'),
+        (
+            r"typedef\s+union\s+(?:\w+\s+)?\{([^}]*)\}\s*([A-Za-z][A-Za-z0-9_]*)\s*;",
+            "union",
+        ),
         # 4. 数组 typedef，如 typedef BYTE_8 DEVICE_ID[3];
-        (r'typedef\s+([^;]+?)\s+([A-Za-z][A-Za-z0-9_]*)\s*\[([^\]]*)\]\s*;', 'array'),
+        (r"typedef\s+([^;]+?)\s+([A-Za-z][A-Za-z0-9_]*)\s*\[([^\]]*)\]\s*;", "array"),
         # 5. 普通 typedef（排除包含 struct/enum/union 的，避免误匹配）
-        (r'typedef\s+(?!struct|enum|union)([^;]+?)\s+([A-Za-z][A-Za-z0-9_]*)\s*;', 'typedef')
+        (
+            r"typedef\s+(?!struct|enum|union)([^;]+?)\s+([A-Za-z][A-Za-z0-9_]*)\s*;",
+            "typedef",
+        ),
     ]
 
     for pattern, kind in patterns:
@@ -59,31 +264,48 @@ def collect_type_definitions_with_comments(header_text, source_file):
             start, end = match.start(), match.end()
             if is_in_comment(start):
                 continue
-            if kind == 'enum':
+            if kind == "enum":
                 body, name = match.groups()
-                values = [v.strip() for v in body.replace('\n', ' ').split(',') if v.strip()]
+                values = [
+                    v.strip() for v in body.replace("\n", " ").split(",") if v.strip()
+                ]
                 definition = {"kind": "enum", "name": name, "values": values}
-            elif kind in ('struct', 'union'):
+            elif kind in ("struct", "union"):
                 body, name = match.groups()
-                members = [m.strip() + ';' for m in body.split(';') if m.strip()]
+                members = [m.strip() + ";" for m in body.split(";") if m.strip()]
                 if len(members) == 1:
-                    member = members[0].rstrip(';')
-                    if re.search(r'\[[^\]]+\]', member):
+                    member = members[0].rstrip(";")
+                    if re.search(r"\[[^\]]+\]", member):
                         orig_type = member
-                        definition = {"kind": "typedef", "name": name, "original_type": orig_type}
+                        definition = {
+                            "kind": "typedef",
+                            "name": name,
+                            "original_type": orig_type,
+                        }
                     else:
                         definition = {"kind": kind, "name": name, "members": members}
                 else:
                     definition = {"kind": kind, "name": name, "members": members}
-            elif kind == 'array':
+            elif kind == "array":
                 orig, name, array_size = match.groups()
-                definition = {"kind": "typedef", "name": name, "original_type": orig.strip() + f"[{array_size}]"}
+                definition = {
+                    "kind": "typedef",
+                    "name": name,
+                    "original_type": orig.strip() + f"[{array_size}]",
+                }
             else:  # typedef
                 orig, name = match.groups()
-                definition = {"kind": "typedef", "name": name, "original_type": orig.strip()}
-            if kind in ('array', 'typedef') and ('struct' in definition.get('original_type', '') or '{' in definition.get('original_type', '')):
+                definition = {
+                    "kind": "typedef",
+                    "name": name,
+                    "original_type": orig.strip(),
+                }
+            if kind in ("array", "typedef") and (
+                "struct" in definition.get("original_type", "")
+                or "{" in definition.get("original_type", "")
+            ):
                 continue
-            
+
             matches.append((start, end, name, definition))
 
     matches.sort(key=lambda x: x[0])
@@ -97,118 +319,23 @@ def collect_type_definitions_with_comments(header_text, source_file):
                 best_end = c_end
                 best_comment = c_text
         if best_comment:
-            if best_comment.startswith('/*') and best_comment.endswith('*/'):
+            if best_comment.startswith("/*") and best_comment.endswith("*/"):
                 cleaned = best_comment[2:-2].strip()
-            elif best_comment.startswith('//'):
+            elif best_comment.startswith("//"):
                 cleaned = best_comment[2:].strip()
             else:
                 cleaned = best_comment.strip()
-            lines = cleaned.split('\n')
+            lines = cleaned.split("\n")
             cleaned_lines = []
             for line in lines:
-                line = line.lstrip('*').strip()
+                line = line.lstrip("*").strip()
                 cleaned_lines.append(line)
-            cleaned = '\n'.join(cleaned_lines)
-            definition['comment'] = cleaned
+            cleaned = "\n".join(cleaned_lines)
+            definition["comment"] = cleaned
         else:
-            definition['comment'] = None
+            definition["comment"] = None
 
-        definition['source_file'] = source_file
+        definition["source_file"] = source_file
         type_defs[name] = definition
 
     return type_defs
-
-def collect_all_types_from_project(project_dir, output_dir=".analysis", enable_ai=True, enable_version_control=True):
-    """
-    Extract type definitions from all .h files in the project directory, associate comments, and save to JSON.
-    """
-    h_files = []
-    for root, dirs, files in os.walk(project_dir):
-        for f in files:
-            if f.endswith('.h'):
-                h_files.append(os.path.join(root, f))
-
-    all_types = {}
-    for hf in h_files:
-        with open(hf, 'rb') as f:
-            raw = f.read()
-        text = decode_file(raw) 
-        all_types.update(collect_type_definitions_with_comments(text, hf))
-
-    unique_types = {}
-    for name, defn in all_types.items():
-        if name not in unique_types:
-            unique_types[name] = defn
-        else:
-            existing = unique_types[name]
-            if existing.get("kind") == "typedef" and defn.get("kind") != "typedef":
-                unique_types[name] = defn
-                print(f"Replacing typedef {name} with {defn['kind']}")
-            else:
-                print(f"Warning: duplicate type definition '{name}' ignored")
-    sorted_names = sorted(unique_types.keys())
-    type_refs = {name: f"A_{idx+1}" for idx, name in enumerate(sorted_names)}
-
-    folder_name = os.path.basename(os.path.normpath(project_dir))
-    output_file = os.path.join(output_dir, f"{folder_name}_global_types.json")
-    old_types = {}
-    diff = None
-    new_output_file = output_file
-
-    is_first_run = not os.path.exists(output_file)
-
-    if enable_version_control and not is_first_run:
-        with open(output_file, 'r', encoding='utf-8') as f:
-            old_data = json.load(f)
-            old_types = old_data.get("type_definitions", {})
-        print(f"Found previous types version: {output_file}")
-        new_output_file = generate_versioned_filename(output_file)
-        diff = compare_types(old_types, unique_types)
-
-    else:
-        if enable_ai: 
-            for type_name, defn in unique_types.items():  
-                prompt = ai_prompt_for_type(type_name, defn)
-                description = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
-                if description:
-                    defn['type_description'] = description
-                else:
-                    defn['type_description'] = "AI 分析失败"
-                time.sleep(0.5)
-            
-    output_data = {
-        "description": "Type definitions extracted from project header files (excluding commented-out ones).",
-        "type_definitions": unique_types,
-        "type_references": type_refs
-    }
-
-    os.makedirs(output_dir, exist_ok=True)
-    folder_name = os.path.basename(os.path.normpath(project_dir))
-    output_file = os.path.join(output_dir, f"{folder_name}_global_types.json")
-    with open(new_output_file, 'w', encoding='utf-8') as f:
-        json.dump(output_data, f, indent=2, ensure_ascii=False)
-    print(f"Type definitions saved to {new_output_file}")
-    print(f"Total types found: {len(unique_types)}")
-
-    if enable_version_control and diff:
-        diff_path = os.path.join(os.path.dirname(new_output_file), "types_diff.json")
-        with open(diff_path, 'w', encoding='utf-8') as f:
-            json.dump(diff, f, indent=2, ensure_ascii=False)
-        print(f"Types diff report saved to {diff_path}")
-        print(f"  Added: {len(diff.get('added', {}))} types")
-        print(f"  Modified: {len(diff.get('modified', {}))} types")
-        print(f"  Removed: {len(diff.get('removed', {}))} types")
-        
-    return new_output_file  
-
-def main():
-    parser = argparse.ArgumentParser(description="Extract type definitions from C/C++ header files.")
-    parser.add_argument("project_dir", nargs='?', default="ATP_CODE/INIT", help="Root directory of the project (contains .c and .h files)")
-    parser.add_argument("--output", "-o", default=".analysis", help="Output directory (default: .analysis)")
-    parser.add_argument("--outfile", "-f", default="INIT_global_types.json", help="Output JSON filename (default: global_types.json)")
-    args = parser.parse_args()
-
-    collect_all_types_from_project(args.project_dir, args.output)
-
-if __name__ == "__main__":
-    main()

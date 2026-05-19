@@ -10,7 +10,11 @@ import json
 import re
 import os
 import argparse
+import logging
 from typing import Dict, Any, List, Tuple, Optional, Set
+
+
+logger = logging.getLogger(__name__)
 
 def remove_c_comments(text: str) -> str:
     """Remove both block /* ... */ and line // ... comments from text."""
@@ -61,7 +65,7 @@ def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types
     type_refs = data.get("type_references", {})
 
     if not type_defs:
-        print("Warning: No type definitions found.")
+        logger.warning("No type definitions found.")
         return
 
     rows: List[Tuple[str, str, str, str]] = []
@@ -101,7 +105,7 @@ def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types
     os.makedirs(os.path.dirname(output_md_path), exist_ok=True)
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(md_lines))
-    print(f"Appendix saved to {output_md_path}")
+    logger.debug("Appendix saved to %s", output_md_path)
 
 def main():
     parser = argparse.ArgumentParser()

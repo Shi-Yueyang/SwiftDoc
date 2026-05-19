@@ -2,6 +2,38 @@ import json
 import os
 import argparse
 
+from utils import iter_progress
+
+
+def normalize_function_for_doc(func):
+    normalized = dict(func)
+    normalized.setdefault("algorithm_logic", "")
+
+    normalized_inputs = []
+    for inp in normalized.get("inputs", []):
+        if isinstance(inp, dict):
+            normalized_input = dict(inp)
+            normalized_input.setdefault("inputs_description", "")
+            normalized_inputs.append(normalized_input)
+    normalized["inputs"] = normalized_inputs
+
+    returns = normalized.get("returns", [])
+    if isinstance(returns, list) and returns and isinstance(returns[0], str):
+        normalized["returns"] = [
+            {"expression": expr, "return_description": ""} for expr in returns
+        ]
+    else:
+        normalized_returns = []
+        for ret in returns if isinstance(returns, list) else []:
+            if isinstance(ret, dict):
+                normalized_return = dict(ret)
+                normalized_return.setdefault("expression", "")
+                normalized_return.setdefault("return_description", "")
+                normalized_returns.append(normalized_return)
+        normalized["returns"] = normalized_returns
+
+    return normalized
+
 def generate_function_md(functions_json=None, function_list=None, types_json=None, figures_dir=None, output_dir="MD"):
     """
     生成 Markdown 文档。
@@ -41,7 +73,8 @@ def generate_function_md(functions_json=None, function_list=None, types_json=Non
 
     os.makedirs(output_dir, exist_ok=True)
 
-    for func in functions:
+    for _, _, raw_func in iter_progress(functions, "Generating markdown"):
+        func = normalize_function_for_doc(raw_func)
         fname = func.get("name", "unknown_func")
         md_lines = [f"# {fname}", "", f"**function：{fname}**", ""]
 

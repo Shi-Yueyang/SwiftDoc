@@ -1,9 +1,13 @@
 import os
 import time
+import logging
 from textwrap import dedent
 from openai import OpenAI
 
 from config_manager import get_missing_ai_keys, resolve_ai_config
+
+
+logger = logging.getLogger(__name__)
 
 def _get_client():
     config, details = resolve_ai_config()
@@ -127,19 +131,19 @@ def call_ai(prompt, temperature, max_tokens, retry_count):
             max_tokens=max_tokens,
         )
         content = response.choices[0].message.content.strip()
-        print(f"AI 返回长度: {len(content)} 字符")
+        logger.debug("AI 返回长度: %s 字符", len(content))
 
         # 如果返回内容为空且还有重试次数，则等待后重试
         if len(content) == 0 and retry_count > 0:
-            print(f"  返回为空，{retry_count} 秒后重试...")
+            logger.debug("返回为空，%s 秒后重试...", retry_count)
             time.sleep(2)
             return call_ai(prompt, temperature, max_tokens, retry_count - 1)
 
         return content if content else None   # 最终为空则返回 None
     except Exception as e:
-        print(f"AI 调用失败详情: {type(e).__name__} - {e}")
+        logger.warning("AI 调用失败详情: %s - %s", type(e).__name__, e)
         if retry_count > 0:
-            print(f"  异常后等待 2 秒重试...")
+            logger.debug("异常后等待 2 秒重试...")
             time.sleep(2)
             return call_ai(prompt, temperature, max_tokens, retry_count - 1)
         return None

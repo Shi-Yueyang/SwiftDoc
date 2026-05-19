@@ -259,3 +259,24 @@ def ensure_ai_config_interactive():
     print(f"  {_style('Target:', 'muted')} {details['config_path']}")
     run_ai_onboarding(merged_config)
     return resolve_ai_config()
+
+
+def rerun_ai_config_interactive():
+    merged_config, details = resolve_ai_config()
+
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "AI configuration requires an interactive terminal. "
+            f"Target: {details['config_path']}"
+        )
+
+    print(_style("AI setup", "bold", "accent"))
+    print(f"  {_style('Target:', 'muted')} {details['config_path']}")
+    if is_ai_config_complete(merged_config):
+        print(f"  {_style('Current:', 'muted')} existing values loaded for editing")
+    else:
+        missing = ", ".join(CONFIG_LABEL_MAP[key] for key in get_missing_ai_keys(merged_config))
+        print(f"  {_style('Missing:', 'warning')} {missing}")
+
+    run_ai_onboarding(merged_config)
+    return resolve_ai_config()

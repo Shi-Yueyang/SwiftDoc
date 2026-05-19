@@ -6,7 +6,13 @@
 
 import json
 import os
+import logging
 import matplotlib.pyplot as plt
+
+from utils import iter_progress
+
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -29,11 +35,11 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
             data = json.load(f)
         functions = data.get("functions", [])
         if not functions:
-            print("错误：JSON 中没有找到 functions 数据")
+            logger.warning("JSON 中没有找到 functions 数据")
             return
 
     if not functions:
-        print("错误：没有函数数据可生成图表")
+        logger.warning("没有函数数据可生成图表")
         return
 
     os.makedirs(output_dir, exist_ok=True)
@@ -41,12 +47,12 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
     plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']  # 支持中文
     plt.rcParams['axes.unicode_minus'] = False
 
-    for idx, func in enumerate(functions, 1):
+    for idx, total, func in iter_progress(functions, "Generating graphs"):
         fname = func.get("name", "unknown")
         callers = func.get("called_by", [])
         callees = func.get("calls", [])
 
-        print(f"({idx}/{len(functions)}) 生成: {fname}")
+        logger.debug("(%s/%s) 生成: %s", idx, total, fname)
 
         y_step = 0.6               # 节点垂直间距
         gap = 1.5                 # 中间函数与左右两侧总线的间隙

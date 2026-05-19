@@ -9,7 +9,11 @@ import os
 import json
 import copy
 import time
+import logging
 from ai_utils import ai_prompt_for_type, ai_prompt_for_function, call_ai
+
+
+logger = logging.getLogger(__name__)
 
 
 def generate_versioned_filename(filepath):
@@ -104,7 +108,7 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
         enable_ai:        是否对新增/修改的函数调用 AI 生成描述
     """
     if not os.path.exists(diff_json_path):
-        print(f"  差异文件不存在: {diff_json_path}")
+        logger.warning("差异文件不存在: %s", diff_json_path)
         return False
 
     with open(diff_json_path, 'r', encoding='utf-8') as f:
@@ -115,7 +119,7 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
     removed = diff.get("removed", [])     
 
     if not (added or modified or removed):
-        print("  没有需要更新的函数变化。")
+        logger.info("没有需要更新的函数变化。")
         return False
 
     # 过滤函数（根据 target_dir）
@@ -131,7 +135,7 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
     filtered_removed = [f for f in removed if is_in_target(f)]
 
     if not (filtered_added or filtered_modified or filtered_removed):
-        print(f"  没有与目标目录相关的函数变化 (target_dir={target_dir})")
+        logger.info("没有与目标目录相关的函数变化 (target_dir=%s)", target_dir)
         return False
 
     # 加载主文件
@@ -147,7 +151,7 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
     # 需要 AI 的函数
     changed_funcs = filtered_added + filtered_modified
     if enable_ai:
-        print(f"  正在为 {len(changed_funcs)} 个变化函数生成 AI 描述...")
+        logger.info("正在为 %s 个变化函数生成 AI 描述...", len(changed_funcs))
         for func_def in changed_funcs:
             if isinstance(func_def.get('returns'), list) and func_def['returns'] and isinstance(func_def['returns'][0], str):
                 func_def['returns'] = [{"expression": expr, "return_description": ""} for expr in func_def['returns']]
@@ -178,7 +182,7 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
             else:
                 func_def['algorithm_logic'] = "AI 分析失败"
             time.sleep(0.5)
-        print(f"  完成 {len(changed_funcs)} 个函数的 AI 增强")
+        logger.info("完成 %s 个函数的 AI 增强", len(changed_funcs))
     else:
         for func_def in changed_funcs:
             func_def.setdefault('algorithm_logic', '')
@@ -200,9 +204,9 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
     master_data["functions"] = updated_funcs
     with open(master_json_path, 'w', encoding='utf-8') as f:
         json.dump(master_data, f, indent=2, ensure_ascii=False)
-    print(f"  主函数文件更新: {master_json_path}")
-    print(f"    新增/修改: {len(changed_funcs)} 个函数")
-    print(f"    删除: {len(filtered_removed)} 个函数")
+    logger.info("主函数文件更新: %s", master_json_path)
+    logger.info("新增/修改: %s 个函数", len(changed_funcs))
+    logger.info("删除: %s 个函数", len(filtered_removed))
     return True
 
 #对比类型
@@ -240,7 +244,7 @@ def update_master_from_diff(master_json_path, diff_json_path, enable_ai=True):
 
     # 1. 加载 diff
     if not os.path.exists(diff_json_path):
-        print(f"差异文件不存在: {diff_json_path}")
+        logger.warning("差异文件不存在: %s", diff_json_path)
         return
     with open(diff_json_path, 'r', encoding='utf-8') as f:
         diff = json.load(f)
@@ -250,7 +254,7 @@ def update_master_from_diff(master_json_path, diff_json_path, enable_ai=True):
     removed = diff.get("removed", {})
 
     if not (added or modified or removed):
-        print("没有需要更新的类型变化。")
+        logger.info("没有需要更新的类型变化。")
         return
 
     # 2. 加载主文件（如果不存在则创建空结构）
@@ -290,7 +294,7 @@ def update_master_from_diff(master_json_path, diff_json_path, enable_ai=True):
     for type_name in removed.keys():
         if type_name in master_types:
             del master_types[type_name]
-            print(f"Removed type: {type_name}")
+            logger.info("Removed type: %s", type_name)
 
     # 5. 重新生成 type_references（保持字母排序）
     sorted_names = sorted(master_types.keys())
@@ -303,6 +307,6 @@ def update_master_from_diff(master_json_path, diff_json_path, enable_ai=True):
     })
     with open(master_json_path, 'w', encoding='utf-8') as f:
         json.dump(master_data, f, indent=2, ensure_ascii=False)
-    print(f"Master types JSON updated: {master_json_path}")
-    print(f"  Added/Modified: {len(changed_names)} types")
-    print(f"  Removed: {len(removed)} types")
+    logger.info("Master types JSON updated: %s", master_json_path)
+    logger.info("Added/Modified: %s types", len(changed_names))
+    logger.info("Removed: %s types", len(removed))

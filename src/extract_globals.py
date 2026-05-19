@@ -6,10 +6,14 @@ Outputs a JSON file with variable name, type, file, kind (definition/extern), an
 
 import os
 import json
+import logging
 import chardet
 import tree_sitter_c
 from tree_sitter import Language, Parser
 from utils import get_node_text, find_identifier
+
+
+logger = logging.getLogger(__name__)
 
 C_LANGUAGE = Language(tree_sitter_c.language())
 parser = Parser(C_LANGUAGE)
@@ -123,6 +127,12 @@ def collect_extern_from_h_file(h_file_path):
     return extern_vars
 
 
+def get_global_key(global_info):
+    if global_info.get("is_static"):
+        return global_info["name"], global_info["file"]
+    return global_info["name"]
+
+
 def extract_all_globals(project_dir):
     c_files = []
     h_files = []
@@ -134,24 +144,29 @@ def extract_all_globals(project_dir):
             elif f.endswith('.h'):
                 h_files.append(full)
 
-    print(f"Found {len(c_files)} .c files, {len(h_files)} .h files")
+    logger.info("Found %s .c files, %s .h files", len(c_files), len(h_files))
     all_globals = {}
 
     for cf in c_files:
         vars_list = collect_globals_from_c_file(cf)
         for v in vars_list:
-            name = v["name"]
-            if name not in all_globals:
-                all_globals[name] = v
+            global_key = get_global_key(v)
+            if global_key not in all_globals:
+                all_globals[global_key] = v
             else:
-                print(f"Warning: duplicate definition of '{name}' in {cf}, previous in {all_globals[name]['file']}")
+                logger.warning(
+                    "Duplicate definition of '%s' in %s, previous in %s",
+                    v["name"],
+                    cf,
+                    all_globals[global_key]["file"],
+                )
 
     for hf in h_files:
         vars_list = collect_extern_from_h_file(hf)
         for v in vars_list:
-            name = v["name"]
-            if name not in all_globals:
-                all_globals[name] = v
+            global_key = get_global_key(v)
+            if global_key not in all_globals:
+                all_globals[global_key] = v
 
     return list(all_globals.values())
 
@@ -169,7 +184,7 @@ def main():
     output_file = os.path.join(args.output, args.outfile)
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump({"globals": globals_list}, f, indent=2, ensure_ascii=False)
-    print(f"Saved {len(globals_list)} global variables to {output_file}")
+    logger.info("Saved %s global variables to %s", len(globals_list), output_file)
 
 
 if __name__ == "__main__":
