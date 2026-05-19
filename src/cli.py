@@ -42,6 +42,8 @@ def build_parser():
         default="off",
         help="Enable AI for type/function analysis and interactive onboarding when config is missing",
     )
+
+    
     return parser
 
 
