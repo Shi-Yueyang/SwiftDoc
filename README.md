@@ -71,31 +71,15 @@ The CLI now works in two stages:
 Build from the repository root with PyInstaller:
 
 ```bash
-./.venv/bin/pip install pyinstaller
-./.venv/bin/pyinstaller --name aoto-md --onedir --clean --paths src src/cli.py
+python --version
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e .
+python -m pip install pyinstaller
+pyinstaller --name auto-md --onedir --clean --paths src src/cli.py
 ```
 
-The executable will be created under `dist/aoto-md/`.
+The executable will be created under `dist/auto-md/`.
 
-Run it on Linux with:
-
-```bash
-./dist/aoto-md/cli generate ATP_CODE --analyse_dir ATP_CODE/DMI
-```
-
-If you want a single-file executable instead of a directory build:
-
-```bash
-./.venv/bin/pyinstaller --name aoto-md --onefile --clean --paths src src/cli.py
-```
-
-Notes:
-
-- Start with `--onedir` first. It is usually easier to debug with `matplotlib`, `tree-sitter`, and `tree-sitter-c`.
-- The executable still reads AI config from the per-user config file, not from the repository.
-- On this machine, the documented build command did not run until the Python shared library for the active interpreter was available.
-- If the bundled app misses package data, try:
-
-```bash
-./.venv/bin/pyinstaller --name aoto-md --onedir --clean --paths src --collect-all matplotlib src/cli.py
-```
+./a u to-md

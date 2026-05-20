@@ -3,6 +3,7 @@ pyproject.toml
 src/ai_utils.py
 src/appendix_generate.py
 src/cli.py
+src/config_manager.py
 src/extract_globals.py
 src/extract_types.py
 src/image_generator.py

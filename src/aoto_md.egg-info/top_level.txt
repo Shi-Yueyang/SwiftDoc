@@ -1,6 +1,7 @@
 ai_utils
 appendix_generate
 cli
+config_manager
 extract_globals
 extract_types
 image_generator
