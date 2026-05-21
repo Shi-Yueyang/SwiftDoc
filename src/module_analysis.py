@@ -417,10 +417,17 @@ def refresh_functions(
         global_lookup = build_global_lookup(globals_data.get("globals", []))
 
     c_files = []
-    for root, _, files in os.walk(project_dir):
-        for f in files:
-            if f.endswith(".c"):
-                c_files.append(os.path.join(root, f))
+    
+    # If project_dir is a file, only process that file
+    if os.path.isfile(project_dir):
+        if project_dir.endswith(".c"):
+            c_files.append(project_dir)
+    else:
+        # Otherwise walk the directory
+        for root, _, files in os.walk(project_dir):
+            for f in files:
+                if f.endswith(".c"):
+                    c_files.append(os.path.join(root, f))
 
     if not c_files:
         logger.debug("No .c files found in %s", project_dir)

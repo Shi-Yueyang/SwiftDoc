@@ -157,7 +157,7 @@ Legacy form still works:
     config_examples = """Examples:
     python src/cli.py config
     python src/cli.py --verbose config
-"""
+    """
 
     subparsers.add_parser(
         "config",

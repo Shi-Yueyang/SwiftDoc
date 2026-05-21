@@ -58,10 +58,14 @@ def generate_function_md(functions_json=None, function_list=None, types_json=Non
     # 加载类型定义（必须）
     if types_json is None:
         raise ValueError("types_json must be provided")
-    with open(types_json, "r", encoding="utf-8") as f:
-        type_data = json.load(f)
-    type_defs = type_data.get("type_definitions", {})
-    type_refs = type_data.get("type_references", {})
+    if os.path.exists(types_json):
+        with open(types_json, "r", encoding="utf-8") as f:
+            type_data = json.load(f)
+        type_defs = type_data.get("type_definitions", {})
+        type_refs = type_data.get("type_references", {})
+    else:
+        type_defs = {}
+        type_refs = {}
 
     # 构建类型描述映射
     type_desc_map = {}

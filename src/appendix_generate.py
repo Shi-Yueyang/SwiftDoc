@@ -59,6 +59,9 @@ def generate_definition(type_name: str, info: Dict[str, Any]) -> str:
         return f"/* unknown kind: {kind} */ {type_name}"
 
 def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types: Optional[Set[str]] = None) -> None:
+    if not os.path.exists(types_json_path):
+        logger.warning("Types cache file not found: %s", types_json_path)
+        return
     with open(types_json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     type_defs = data.get("type_definitions", {})

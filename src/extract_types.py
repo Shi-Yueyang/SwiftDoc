@@ -43,10 +43,17 @@ def load_previous_type_cache(cache_path):
 
 def scan_project_types(project_dir):
     h_files = []
-    for root, dirs, files in os.walk(project_dir):
-        for f in files:
-            if f.endswith(".h"):
-                h_files.append(os.path.join(root, f))
+    
+    # If project_dir is a file, only process that file
+    if os.path.isfile(project_dir):
+        if project_dir.endswith(".h"):
+            h_files.append(project_dir)
+    else:
+        # Otherwise walk the directory
+        for root, dirs, files in os.walk(project_dir):
+            for f in files:
+                if f.endswith(".h"):
+                    h_files.append(os.path.join(root, f))
 
     all_types = {}
     for hf in h_files:

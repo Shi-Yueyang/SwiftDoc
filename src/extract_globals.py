@@ -136,13 +136,22 @@ def get_global_key(global_info):
 def extract_all_globals(project_dir):
     c_files = []
     h_files = []
-    for root, _, files in os.walk(project_dir):
-        for f in files:
-            full = os.path.join(root, f)
-            if f.endswith('.c'):
-                c_files.append(full)
-            elif f.endswith('.h'):
-                h_files.append(full)
+    
+    # If project_dir is a file, only process that file
+    if os.path.isfile(project_dir):
+        if project_dir.endswith('.c'):
+            c_files.append(project_dir)
+        elif project_dir.endswith('.h'):
+            h_files.append(project_dir)
+    else:
+        # Otherwise walk the directory
+        for root, _, files in os.walk(project_dir):
+            for f in files:
+                full = os.path.join(root, f)
+                if f.endswith('.c'):
+                    c_files.append(full)
+                elif f.endswith('.h'):
+                    h_files.append(full)
 
     logger.info("Found %s .c files, %s .h files", len(c_files), len(h_files))
     all_globals = {}

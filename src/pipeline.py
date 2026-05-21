@@ -27,7 +27,11 @@ def colorize_extract_phase_message(message, color):
 
 
 def build_analysis_paths(cache_dir, project_root):
-    folder_name = os.path.basename(os.path.normpath(project_root))
+    # If project_root is a file, use its parent directory for naming
+    if os.path.isfile(project_root):
+        folder_name = os.path.basename(os.path.dirname(os.path.normpath(project_root)))
+    else:
+        folder_name = os.path.basename(os.path.normpath(project_root))
     return {
         "globals": os.path.join(cache_dir, f"{folder_name}_global_variables.json"),
         "types": os.path.join(cache_dir, f"{folder_name}_global_types.json"),
@@ -82,13 +86,21 @@ def run_docgen_phase(args):
     types_json = analysis_paths["types"]
     functions_json = analysis_paths["functions"]
 
- 
-    with open(types_json, 'r', encoding='utf-8') as f:
-        types_data = json.load(f)
-        type_refs = types_data.get("type_references", {})
+    # Handle missing cache files (can happen when single file is passed)
+    if not os.path.exists(types_json):
+        logger.warning("Types cache file not found: %s", types_json)
+        types_data = {"type_definitions": {}, "type_references": {}}
+    else:
+        with open(types_json, 'r', encoding='utf-8') as f:
+            types_data = json.load(f)
+    type_refs = types_data.get("type_references", {})
 
-    with open(functions_json, 'r', encoding='utf-8') as f:
-        all_functions = json.load(f).get("functions", [])
+    if not os.path.exists(functions_json):
+        logger.warning("Functions cache file not found: %s", functions_json)
+        all_functions = []
+    else:
+        with open(functions_json, 'r', encoding='utf-8') as f:
+            all_functions = json.load(f).get("functions", [])
 
 
     # filter functions based on analyse_dir
