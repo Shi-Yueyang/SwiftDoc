@@ -1,6 +1,19 @@
 import sys
+import os
 
 import chardet
+
+
+def enable_ansi_support():
+    """Enable ANSI escape sequence support on Windows."""
+    if sys.platform == "win32":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        # Enable virtual terminal processing
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+
+
+enable_ansi_support()
 
 
 ANSI_RESET = "\033[0m"
