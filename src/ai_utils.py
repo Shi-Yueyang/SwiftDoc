@@ -114,14 +114,8 @@ def ai_prompt_for_function(func):
 
 
 def call_ai(prompt, temperature, max_tokens, retry_count):
-    """
-    调用 AI 接口，如果返回内容为空，则等待 2 秒后重试一次。
-
-    参数:
-        retry_count: 剩余重试次数（内部使用，调用者无需指定）
-    返回:
-        成功返回内容字符串，失败返回 None
-    """
+    logger.debug("[AI API] Call started (retries_left=%d)", retry_count)
+    
     try:
         client, model_name = _get_client()
         response = client.chat.completions.create(
@@ -130,20 +124,35 @@ def call_ai(prompt, temperature, max_tokens, retry_count):
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        content = response.choices[0].message.content.strip()
-        logger.debug("AI 返回长度: %s 字符", len(content))
+        
+        if not response.choices or not response.choices[0].message:
+            logger.debug("[AI API] Invalid response, retrying (retries_left=%d)", retry_count - 1)
+            if retry_count > 0:
+                time.sleep(2)
+                return call_ai(prompt, temperature, max_tokens, retry_count - 1)
+            return None
+        
+        content = response.choices[0].message.content
+        if content is None:
+            content = ""
+        else:
+            content = content.strip()
 
-        # 如果返回内容为空且还有重试次数，则等待后重试
-        if len(content) == 0 and retry_count > 0:
-            logger.debug("返回为空，%s 秒后重试...", retry_count)
-            time.sleep(2)
-            return call_ai(prompt, temperature, max_tokens, retry_count - 1)
-
-        return content if content else None   # 最终为空则返回 None
+        if len(content) == 0:
+            logger.debug("[AI API] Empty response, retrying (retries_left=%d)", retry_count - 1)
+            if retry_count > 0:
+                time.sleep(2)
+                return call_ai(prompt, temperature, max_tokens, retry_count - 1)
+            logger.debug("[AI API] Failed: empty response after all retries")
+            return None
+            
+        logger.debug("[AI API] Success")
+        return content
+        
     except Exception as e:
-        logger.warning("AI 调用失败详情: %s - %s", type(e).__name__, e)
+        logger.debug("[AI API] Exception: %s, retrying (retries_left=%d)", type(e).__name__, retry_count - 1)
         if retry_count > 0:
-            logger.debug("异常后等待 2 秒重试...")
             time.sleep(2)
             return call_ai(prompt, temperature, max_tokens, retry_count - 1)
+        logger.debug("[AI API] Failed: %s after all retries", type(e).__name__)
         return None

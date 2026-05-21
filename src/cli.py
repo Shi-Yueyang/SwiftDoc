@@ -6,6 +6,7 @@ import os
 import sys
 from config_manager import ensure_ai_config_interactive, rerun_ai_config_interactive
 from pipeline import build_analysis_paths, run_extract_phase, run_docgen_phase
+from utils import get_default_cache_dir
 
 
 def configure_logging(verbose=False):
@@ -69,7 +70,7 @@ def normalize_argv(argv):
     return [*argv[:insert_at], "generate", *argv[insert_at:]]
 
 
-def build_parser():
+def build_parser(default_cache_dir):
     parser = argparse.ArgumentParser(
         description="Analyze C project, generate markdown docs, and manage AI configuration",
     )
@@ -107,7 +108,7 @@ Legacy form still works:
     )
     generate_parser.add_argument(
         "--cache_dir",
-        default=".analysis",
+        default=default_cache_dir,
         help="Cache directory for intermediate JSON files",
     )
     generate_parser.add_argument(
@@ -144,7 +145,7 @@ Legacy form still works:
     )
     write_parser.add_argument(
         "--cache_dir",
-        default=".analysis",
+        default=default_cache_dir,
         help="Cache directory for intermediate JSON files",
     )
     write_parser.add_argument(
@@ -170,7 +171,8 @@ Legacy form still works:
 
 
 def main():
-    parser = build_parser()
+    default_cache_dir = str(get_default_cache_dir())
+    parser = build_parser(default_cache_dir)
     cli_args = parser.parse_args(normalize_argv(sys.argv[1:]))
     configure_logging(verbose=cli_args.verbose)
 
