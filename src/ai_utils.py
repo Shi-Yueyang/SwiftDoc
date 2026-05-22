@@ -4,7 +4,7 @@ import logging
 from textwrap import dedent
 from openai import OpenAI
 
-from config_manager import get_missing_ai_keys, resolve_ai_config
+from config_manager import get_missing_ai_keys, resolve_ai_config, load_ai_call_params
 
 
 logger = logging.getLogger(__name__)
@@ -113,8 +113,33 @@ def ai_prompt_for_function(func):
     return prompt
 
 
+AI_FAILED = "ai failed"
+
+# Lazy-loaded cache for AI call params from config file
+_cached_call_params = None
+
+
+def get_ai_call_params():
+    """Get temperature, max_tokens, retry_count from config (cached after first call)."""
+    global _cached_call_params
+    if _cached_call_params is None:
+        _cached_call_params = load_ai_call_params()
+    return _cached_call_params
+
+
+def call_ai_from_config(prompt):
+    """Call AI using parameters loaded from the user config file."""
+    params = get_ai_call_params()
+    return call_ai(
+        prompt,
+        temperature=params["temperature"],
+        max_tokens=params["max_tokens"],
+        retry_count=params["retry_count"],
+    )
+
+
 def call_ai(prompt, temperature, max_tokens, retry_count):
-    logger.debug("[AI API] Call started (retries_left=%d)", retry_count)
+    logger.debug("[AI API] Call started (max_tokens=%d, retries_left=%d)", max_tokens, retry_count)
     
     try:
         client, model_name = _get_client()
@@ -129,8 +154,9 @@ def call_ai(prompt, temperature, max_tokens, retry_count):
             logger.debug("[AI API] Invalid response, retrying (retries_left=%d)", retry_count - 1)
             if retry_count > 0:
                 time.sleep(2)
-                return call_ai(prompt, temperature, max_tokens, retry_count - 1)
-            return None
+                return call_ai(prompt, temperature, max_tokens * 2, retry_count - 1)
+            logger.debug("[AI API] Failed: invalid response after all retries")
+            return AI_FAILED
         
         content = response.choices[0].message.content
         if content is None:
@@ -139,12 +165,12 @@ def call_ai(prompt, temperature, max_tokens, retry_count):
             content = content.strip()
 
         if len(content) == 0:
-            logger.debug("[AI API] Empty response, retrying (retries_left=%d)", retry_count - 1)
+            logger.debug("[AI API] Empty response, retrying with doubled max_tokens (retries_left=%d)", retry_count - 1)
             if retry_count > 0:
                 time.sleep(2)
-                return call_ai(prompt, temperature, max_tokens, retry_count - 1)
+                return call_ai(prompt, temperature, max_tokens * 2, retry_count - 1)
             logger.debug("[AI API] Failed: empty response after all retries")
-            return None
+            return AI_FAILED
             
         logger.debug("[AI API] Success")
         return content
@@ -153,6 +179,6 @@ def call_ai(prompt, temperature, max_tokens, retry_count):
         logger.debug("[AI API] Exception: %s, retrying (retries_left=%d)", type(e).__name__, retry_count - 1)
         if retry_count > 0:
             time.sleep(2)
-            return call_ai(prompt, temperature, max_tokens, retry_count - 1)
+            return call_ai(prompt, temperature, max_tokens * 2, retry_count - 1)
         logger.debug("[AI API] Failed: %s after all retries", type(e).__name__)
-        return None
+        return AI_FAILED

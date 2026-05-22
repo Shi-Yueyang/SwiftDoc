@@ -20,6 +20,24 @@ CONFIG_JSON_MAP = {
     "model_name": "model_name",
 }
 
+OPTIONAL_CONFIG_JSON_MAP = {
+    "temperature": "temperature",
+    "max_tokens": "max_tokens",
+    "retry_count": "retry_count",
+}
+
+OPTIONAL_CONFIG_DEFAULTS = {
+    "temperature": 1.0,
+    "max_tokens": 800,
+    "retry_count": 1,
+}
+
+OPTIONAL_CONFIG_TYPES = {
+    "temperature": float,
+    "max_tokens": int,
+    "retry_count": int,
+}
+
 REQUIRED_KEYS = tuple(CONFIG_JSON_MAP.keys())
 APP_DIR_NAME = "aoto-md"
 
@@ -87,12 +105,36 @@ def _normalize_config(raw_config, mapping):
     return normalized
 
 
+def _normalize_optional_config(raw_config):
+    """Load optional config keys (temperature, max_tokens, retry_count) with type conversion and defaults."""
+    normalized = {}
+    for key, source_key in OPTIONAL_CONFIG_JSON_MAP.items():
+        value = raw_config.get(source_key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            normalized[key] = OPTIONAL_CONFIG_DEFAULTS[key]
+            continue
+        try:
+            normalized[key] = OPTIONAL_CONFIG_TYPES[key](value)
+        except (ValueError, TypeError):
+            normalized[key] = OPTIONAL_CONFIG_DEFAULTS[key]
+    return normalized
+
+
 def load_user_config(config_path=None):
     config_path = config_path or get_config_path()
     raw_config = _read_json_file(config_path)
     if not raw_config:
         return {}, config_path
-    return _normalize_config(raw_config, CONFIG_JSON_MAP), config_path
+    normalized = _normalize_config(raw_config, CONFIG_JSON_MAP)
+    normalized.update(_normalize_optional_config(raw_config))
+    return normalized, config_path
+
+
+def load_ai_call_params(config_path=None):
+    """Load temperature, max_tokens, retry_count from user config (with defaults)."""
+    config_path = config_path or get_config_path()
+    raw_config = _read_json_file(config_path)
+    return _normalize_optional_config(raw_config)
 
 
 def merge_config_sources(*named_sources):
@@ -153,7 +195,12 @@ def test_ai_connection(config):
 
 def save_user_config(config, config_path=None):
     config_path = config_path or get_config_path()
+    # Preserve existing optional values from disk so onboarding doesn't strip them
+    existing_raw = _read_json_file(config_path)
     payload = {json_key: config[key] for key, json_key in CONFIG_JSON_MAP.items()}
+    for key, json_key in OPTIONAL_CONFIG_JSON_MAP.items():
+        if json_key in existing_raw:
+            payload[json_key] = existing_raw[json_key]
 
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -244,6 +291,7 @@ def ensure_ai_config_interactive():
     merged_config, details = resolve_ai_config()
     if is_ai_config_complete(merged_config):
         _print_status("Ready", f"Using {details['config_path']}", "success")
+        _ensure_optional_config_defaults(details['config_path'])
         return merged_config, details
 
     if not sys.stdin.isatty():
@@ -258,7 +306,70 @@ def ensure_ai_config_interactive():
     print(f"  {_style('Missing:', 'warning')} {missing}")
     print(f"  {_style('Target:', 'muted')} {details['config_path']}")
     run_ai_onboarding(merged_config)
-    return resolve_ai_config()
+    merged_config, details = resolve_ai_config()
+    _ensure_optional_config_defaults(details['config_path'])
+    return merged_config, details
+
+
+def _ensure_optional_config_defaults(config_path):
+    """Ensure optional config keys (temperature, max_tokens, retry_count) exist in config file with defaults."""
+    raw_config = _read_json_file(config_path)
+    updated = False
+    for key, json_key in OPTIONAL_CONFIG_JSON_MAP.items():
+        if json_key not in raw_config:
+            raw_config[json_key] = OPTIONAL_CONFIG_DEFAULTS[key]
+            updated = True
+
+    if updated:
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            if os.name != "nt":
+                os.chmod(config_path.parent, 0o700)
+            with config_path.open("w", encoding="utf-8") as handle:
+                json.dump(raw_config, handle, indent=2, ensure_ascii=False)
+                handle.write("\n")
+            if os.name != "nt":
+                os.chmod(config_path, 0o600)
+        except OSError as exc:
+            raise RuntimeError(f"Unable to write user config file: {config_path}") from exc
+
+
+def set_config_value(key, value, config_path=None):
+    """Set a single config key to a value. Supports both required and optional keys."""
+    config_path = config_path or get_config_path()
+    raw_config = _read_json_file(config_path)
+
+    # Determine the JSON key name
+    json_key = None
+    if key in CONFIG_JSON_MAP:
+        json_key = CONFIG_JSON_MAP[key]
+    elif key in OPTIONAL_CONFIG_JSON_MAP:
+        json_key = OPTIONAL_CONFIG_JSON_MAP[key]
+    else:
+        raise ValueError(f"Unknown config key: {key}. Valid keys: {list(CONFIG_JSON_MAP.keys()) + list(OPTIONAL_CONFIG_JSON_MAP.keys())}")
+
+    # Type conversion for optional keys
+    if key in OPTIONAL_CONFIG_TYPES:
+        try:
+            value = OPTIONAL_CONFIG_TYPES[key](value)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid value for {key}: expected {OPTIONAL_CONFIG_TYPES[key].__name__}, got: {value}") from exc
+
+    raw_config[json_key] = value
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            os.chmod(config_path.parent, 0o700)
+        with config_path.open("w", encoding="utf-8") as handle:
+            json.dump(raw_config, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+        if os.name != "nt":
+            os.chmod(config_path, 0o600)
+    except OSError as exc:
+        raise RuntimeError(f"Unable to write user config file: {config_path}") from exc
+
+    return config_path
 
 
 def rerun_ai_config_interactive():

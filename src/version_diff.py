@@ -10,7 +10,7 @@ import json
 import copy
 import time
 import logging
-from ai_utils import ai_prompt_for_type, ai_prompt_for_function, call_ai
+from ai_utils import ai_prompt_for_type, ai_prompt_for_function, call_ai_from_config, AI_FAILED
 
 
 logger = logging.getLogger(__name__)
@@ -163,8 +163,8 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
                 inp.setdefault('inputs_description', '')
 
             prompt = ai_prompt_for_function(func_def)
-            response = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
-            if response:
+            response = call_ai_from_config(prompt)
+            if response != AI_FAILED:
                 try:
                     desc = json.loads(response)
                     func_def['algorithm_logic'] = desc.get('algorithm_logic', '')
@@ -178,9 +178,9 @@ def update_master_from_diff_functions(master_json_path, diff_json_path, target_d
                         else:
                             ret_item.setdefault('return_description', '')
                 except json.JSONDecodeError:
-                    func_def['algorithm_logic'] = "AI 分析失败"
+                    func_def['algorithm_logic'] = AI_FAILED
             else:
-                func_def['algorithm_logic'] = "AI 分析失败"
+                func_def['algorithm_logic'] = AI_FAILED
             time.sleep(0.5)
         logger.info("完成 %s 个函数的 AI 增强", len(changed_funcs))
     else:
@@ -279,8 +279,8 @@ def update_master_from_diff(master_json_path, diff_json_path, enable_ai=True):
         # 如果需要 AI 描述，生成
         if enable_ai:
             prompt = ai_prompt_for_type(type_name, new_def)
-            desc = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
-            new_def['type_description'] = desc if desc else "AI 分析失败"
+            desc = call_ai_from_config(prompt)
+            new_def['type_description'] = desc
             time.sleep(0.5)
         else:
             # 保留主文件中已有的描述（如果有）

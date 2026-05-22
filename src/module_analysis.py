@@ -20,7 +20,7 @@ import chardet
 import tree_sitter_c
 from tree_sitter import Language, Parser
 from utils import get_node_text, find_identifier, highlight_message
-from ai_utils import ai_prompt_for_function, call_ai
+from ai_utils import ai_prompt_for_function, call_ai_from_config, AI_FAILED
 from version_diff import compare_functions
 
 logger = logging.getLogger(__name__)
@@ -349,9 +349,9 @@ def enrich_function_with_ai(func, type_descriptions):
     prepare_function_metadata(func, type_descriptions)
 
     prompt = ai_prompt_for_function(func)
-    response = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
+    response = call_ai_from_config(prompt)
     logger.debug("AI raw response for %s:\n%s\n", func["name"], response)
-    if response:
+    if response != AI_FAILED:
         try:
             desc = json.loads(response)
             func["algorithm_logic"] = desc.get("algorithm_logic", "")
@@ -370,18 +370,18 @@ def enrich_function_with_ai(func, type_descriptions):
                 )
             logger.debug("Generated AI description for function: %s", func["name"])
         except json.JSONDecodeError as exc:
-            logger.warning("JSON 解析失败: %s", exc)
-            func["algorithm_logic"] = "AI 分析失败"
+            logger.debug("JSON parse failed: %s | raw response: %s", exc, response)
+            func["algorithm_logic"] = AI_FAILED
             logger.debug("Marked function as AI failed: %s", func["name"])
     else:
-        func["algorithm_logic"] = "AI 分析失败"
+        func["algorithm_logic"] = AI_FAILED
         logger.debug("Marked function as AI failed: %s", func["name"])
     return func["algorithm_logic"]
 
 
 def summarize_ai_result(description):
     normalized = " ".join(str(description).split())
-    success = normalized != "AI 分析失败"
+    success = normalized != AI_FAILED
     preview = normalized[:AI_RESULT_PREVIEW_CHARS]
     if len(normalized) > AI_RESULT_PREVIEW_CHARS:
         preview = f"{preview}..."

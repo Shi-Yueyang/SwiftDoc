@@ -13,7 +13,7 @@ import tempfile
 import copy
 from utils import decode_file, highlight_message
 from version_diff import compare_types
-from ai_utils import ai_prompt_for_type, call_ai
+from ai_utils import ai_prompt_for_type, call_ai_from_config, AI_FAILED
 
 logger = logging.getLogger(__name__)
 AI_RESULT_PREVIEW_CHARS = 24
@@ -96,19 +96,18 @@ def write_types_cache(cache_path, master_data):
 
 def enrich_type_definition(type_name, type_definition):
     prompt = ai_prompt_for_type(type_name, type_definition)
-    description = call_ai(prompt, temperature=1.0, max_tokens=800, retry_count=1)
-    if description:
-        type_definition["type_description"] = description
-        logger.debug("Generated AI description for type: %s", type_name)
-    else:
-        type_definition["type_description"] = "AI 分析失败"
+    description = call_ai_from_config(prompt)
+    type_definition["type_description"] = description
+    if description == AI_FAILED:
         logger.debug("Marked type as AI failed: %s", type_name)
+    else:
+        logger.debug("Generated AI description for type: %s", type_name)
     return type_definition["type_description"]
 
 
 def summarize_ai_result(description):
     normalized = " ".join(str(description).split())
-    success = normalized != "AI 分析失败"
+    success = normalized != AI_FAILED
     preview = normalized[:AI_RESULT_PREVIEW_CHARS]
     if len(normalized) > AI_RESULT_PREVIEW_CHARS:
         preview = f"{preview}..."

@@ -4,7 +4,7 @@ import argparse
 import logging
 import os
 import sys
-from config_manager import ensure_ai_config_interactive, rerun_ai_config_interactive
+from config_manager import ensure_ai_config_interactive, rerun_ai_config_interactive, set_config_value
 from pipeline import build_analysis_paths, run_extract_phase, run_docgen_phase
 from utils import get_default_cache_dir
 
@@ -71,8 +71,25 @@ def normalize_argv(argv):
 
 
 def build_parser(default_cache_dir):
+    examples = """Examples:
+  Generate documentation:
+    python src/cli.py generate ATP_CODE
+    python src/cli.py generate ATP_CODE --analyse_dir ATP_CODE/DMI
+    python src/cli.py generate ATP_CODE --analyse_dir ATP_CODE/DMI/dmi_input.c --cache_dir .analysis --output_folder out_docs --ai on
+
+  Write from existing cache:
+    python src/cli.py write ATP_CODE --cache_dir .analysis --output_folder out_docs
+
+  Configure AI:
+    python src/cli.py config
+    python src/cli.py config temperature 0.7
+    python src/cli.py config max_tokens 1500
+    python src/cli.py config retry_count 3
+"""
     parser = argparse.ArgumentParser(
         description="Analyze C project, generate markdown docs, and manage AI configuration",
+        epilog=examples,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--verbose",
@@ -80,7 +97,7 @@ def build_parser(default_cache_dir):
         help="Enable verbose debug logging",
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     generate_examples = """Examples:
     python src/cli.py generate ATP_CODE
@@ -125,7 +142,7 @@ Legacy form still works:
 
     write_examples = """Examples:
     python src/cli.py write ATP_CODE/MT
-    python src/cli.py write ATP_CODE --analyse_dir ATP_CODE/DMI --cache_dir .analysis --output_folder out_docs
+    python src/cli.py write ATP_CODE --analyse_dir ATP_CODE/DMI --cache_dir .cache --output_folder out
     """
 
     write_parser = subparsers.add_parser(
@@ -157,14 +174,27 @@ Legacy form still works:
     config_examples = """Examples:
     python src/cli.py config
     python src/cli.py --verbose config
+    python src/cli.py config temperature 0.7
+    python src/cli.py config max_tokens 1500
+    python src/cli.py config retry_count 3
     """
 
-    subparsers.add_parser(
+    config_parser = subparsers.add_parser(
         "config",
-        help="Run the interactive AI configuration onboarding flow",
-        description="Rerun the interactive AI configuration onboarding flow, even if a config file already exists.",
+        help="Run the interactive AI configuration onboarding flow or set a config value directly",
+        description="Rerun the interactive AI configuration onboarding flow, or set a specific config key to a value.",
         epilog=config_examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    config_parser.add_argument(
+        "key",
+        nargs="?",
+        help="Config key to set (e.g., temperature, max_tokens, retry_count)",
+    )
+    config_parser.add_argument(
+        "value",
+        nargs="?",
+        help="Config value to set",
     )
 
     return parser
@@ -177,7 +207,16 @@ def main():
     configure_logging(verbose=cli_args.verbose)
 
     if cli_args.command == "config":
-        rerun_ai_config_interactive()
+        if cli_args.key and cli_args.value:
+            try:
+                config_path = set_config_value(cli_args.key, cli_args.value)
+                print(f"Config updated: {cli_args.key} = {cli_args.value}")
+                print(f"Config file: {config_path}")
+            except ValueError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            rerun_ai_config_interactive()
         return
 
     analyse_dir = cli_args.analyse_dir or cli_args.root_dir
