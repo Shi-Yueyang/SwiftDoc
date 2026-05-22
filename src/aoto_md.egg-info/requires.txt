@@ -1,6 +1,0 @@
-chardet==7.4.3
-matplotlib==3.10.9
-openai==2.32.0
-tree-sitter==0.25.2
-tree-sitter-c==0.24.1
-socksio==1.0.0

@@ -6,8 +6,7 @@ import sys
 from extract_globals import extract_all_globals
 from extract_types import refresh_type_definitions
 from image_generator import generate_function_graphs
-from md_generator import generate_function_md
-from appendix_generate import generate_appendix_md
+from md_generator import generate_function_md, generate_appendix_md
 from module_analysis import (
     refresh_functions
 )

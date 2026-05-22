@@ -21,7 +21,7 @@ import tree_sitter_c
 from tree_sitter import Language, Parser
 from utils import get_node_text, find_identifier, highlight_message
 from ai_utils import ai_prompt_for_function, call_ai_from_config, AI_FAILED
-from version_diff import compare_functions
+from compare import compare_functions
 
 logger = logging.getLogger(__name__)
 AI_RESULT_PREVIEW_CHARS = 24

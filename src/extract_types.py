@@ -12,7 +12,7 @@ import logging
 import tempfile
 import copy
 from utils import decode_file, highlight_message
-from version_diff import compare_types
+from compare import compare_types
 from ai_utils import ai_prompt_for_type, call_ai_from_config, AI_FAILED
 
 logger = logging.getLogger(__name__)

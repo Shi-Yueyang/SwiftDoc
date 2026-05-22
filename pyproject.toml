@@ -25,12 +25,13 @@ package-dir = {"" = "src"}
 py-modules = [
   "cli",
   "ai_utils",
-  "appendix_generate",
+  "compare",
   "config_manager",
   "extract_globals",
   "extract_types",
   "image_generator",
   "md_generator",
   "module_analysis",
+  "pipeline",
   "utils",
 ]
