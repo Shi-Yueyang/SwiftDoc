@@ -66,6 +66,29 @@ The CLI now works in two stages:
 - Doc generation filters that extracted data down to `analyse_dir`.
 - `analyse_dir` must stay inside `root_dir`.
 
+## Offline Installation from Wheels
+
+To install the project in an offline environment using pre-downloaded wheels:
+
+```bash
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # On Windows
+# source .venv/bin/activate  # On Linux/macOS
+
+# Install from wheels directory (offline)
+pip install --no-index --find-links=wheels .
+```
+
+To download all dependencies as wheels for offline distribution:
+
+```bash
+# From the project root
+pip download . -d wheels
+```
+
+This creates a `wheels/` directory containing all required `.whl` files that can be transported to other machines.
+
 ## Build Executable
 
 Build from the repository root with PyInstaller:

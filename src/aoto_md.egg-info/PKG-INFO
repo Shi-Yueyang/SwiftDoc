@@ -90,9 +90,9 @@ source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e .
 python -m pip install pyinstaller
-pyinstaller --name auto-md --onedir --clean --paths src src/cli.py
+pyinstaller --name auto-md --onefile --clean --paths src src/cli.py
 ```
 
-The executable will be created under `dist/auto-md/`.
+The standalone executable will be created under `dist/auto-md.exe`.
 
 ./a u to-md
