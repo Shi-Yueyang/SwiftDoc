@@ -110,6 +110,12 @@ def build_parser(default_cache_dir):
         default="markdown",
         help="Output documentation format (default: markdown)",
     )
+    generate_parser.add_argument(
+        "--group-by",
+        choices=["function", "file"],
+        default="function",
+        help="Generate one .md per function or per source file (default: function)",
+    )
 
     config_examples = """Examples:
     python -m cli config
@@ -185,6 +191,7 @@ def main():
         cache_dir=cli_args.cache_dir,
         output_folder=cli_args.output_folder,
         format=getattr(cli_args, "format", "markdown"),
+        group_by=getattr(cli_args, "group_by", "function"),
     )
     run_docgen_phase(docgen_args)
 

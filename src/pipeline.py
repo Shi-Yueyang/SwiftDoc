@@ -113,7 +113,7 @@ def run_docgen_phase(args):
         with open(functions_json, "r", encoding="utf-8") as f:
             all_functions = json.load(f).get("functions", [])
 
-    normalized_dirs = [os.path.normpath(d) for d in analyse_dirs]
+    normalized_dirs = [os.path.abspath(d) for d in analyse_dirs]
     selected_funcs = []
     seen = set()
     for func in all_functions:
@@ -149,6 +149,7 @@ def run_docgen_phase(args):
         types_json=types_json,
         figures_dir=figures_dir,
         output_dir=output_folder,
+        group_by=getattr(args, "group_by", "function"),
     )
 
     appendix_output = os.path.join(output_folder, "appendix.md")

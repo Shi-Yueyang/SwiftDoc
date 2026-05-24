@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+from collections import defaultdict
 
 from core.utils import iter_progress
 
@@ -37,18 +38,159 @@ def normalize_function_for_doc(func):
 
     return normalized
 
-def generate_function_md(functions_json=None, function_list=None, types_json=None, figures_dir=None, output_dir="MD"):
-    """
-    生成 Markdown 文档。
 
-    Args:
-        functions_json: 函数 JSON 文件路径（当 function_list 为 None 时必填）
-        function_list: 函数列表（可选，若提供则忽略 functions_json）
-        types_json: 类型定义 JSON 文件路径（必填）
-        figures_dir: 调用关系图所在目录（必填，用于生成图片相对路径）
-        output_dir: MD 文档输出目录（默认 "MD"）
-    """
-    # 获取函数列表
+def _write_function_section(func, type_refs, type_desc_map, figures_dir):
+    """Return a list of markdown lines for a single function section."""
+    fname = func.get("name", "unknown_func")
+    lines = [f"## {fname}", "", f"**function：{fname}**", ""]
+
+    inputs = func.get("inputs", [])
+
+    # Input table
+    lines.append("### 输入项")
+    lines.append("| 标识符ID | 类型Type | 输入方式Input mode | 数据方向Direction of data | 描述Description |")
+    lines.append("|----------|----------|--------------------|---------------------------|------------------|")
+    if inputs:
+        for inp in inputs:
+            name = inp.get("name", "N/A")
+            typ = inp.get("type", "N/A")
+            mode = "Parameter" if inp.get("kind") == "parameter" else "Global variable"
+            direction = inp.get("direction", "in")
+            desc = inp.get("inputs_description", "") or "N/A"
+            lines.append(f"| {name} | {typ} | {mode} | {direction} | {desc} |")
+    else:
+        lines.append("| N/A | N/A | N/A | N/A | N/A |")
+    lines.append("")
+
+    # Output table
+    lines.append("### 输出项")
+    lines.append("| 标识符ID | 类型Type | 输出方式Output mode | 描述Description |")
+    lines.append("|----------|----------|---------------------|------------------|")
+    returns = func.get("returns", [])
+    if returns and isinstance(returns, list):
+        valid_returns = [ret for ret in returns if ret.get("expression") or ret.get("return_description")]
+        if valid_returns:
+            for ret in valid_returns:
+                expr = ret.get("expression", "")
+                ret_desc = ret.get("return_description", "") or "N/A"
+                lines.append(f"| {expr} | N/A | Return | {ret_desc} |")
+        else:
+            lines.append("| N/A | N/A | N/A | N/A |")
+    else:
+        lines.append("| N/A | N/A | N/A | N/A |")
+    lines.append("")
+
+    # Global data structures
+    global_types = {}
+    for inp in inputs:
+        if inp.get("kind") == "Global variable":
+            typ = inp.get("type", "")
+            ref = inp.get("type_ref", "")
+            if typ and ref and ref not in ("", "NA", "N/A"):
+                if typ not in global_types:
+                    global_types[typ] = ref
+
+    lines.append("### 全局数据结构")
+    lines.append("| 类型Type | 参考Ref | 描述Description |")
+    lines.append("|----------|---------|------------------|")
+    if global_types:
+        for typ, ref in global_types.items():
+            base_type = typ.split("[")[0].strip().rstrip("*").strip()
+            ref_code = type_refs.get(base_type, ref)
+            desc = type_desc_map.get(base_type, "") or "N/A"
+            lines.append(f"| {typ} | {ref_code} | {desc} |")
+    else:
+        lines.append("| N/A | N/A | N/A |")
+    lines.append("")
+
+    # Local data structures (placeholder)
+    lines.append("### 局部数据结构")
+    lines.append("| 类型Type | 参考Ref | 描述Description |")
+    lines.append("|----------|---------|------------------|")
+    lines.append("| N/A | N/A | N/A |")
+    lines.append("")
+
+    # Algorithm
+    algo = func.get("algorithm_logic", "")
+    lines.append("### 算法和逻辑")
+    lines.append(algo)
+    lines.append("")
+
+    # Call graph
+    img_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_") + ".png"
+    img_abs_path = os.path.join(figures_dir, img_name)
+    lines.append("### 接口")
+    lines.append(f"![]({img_abs_path})")
+    lines.append("")
+
+    return lines
+
+
+def _load_types(types_json):
+    if types_json and os.path.exists(types_json):
+        with open(types_json, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return (
+            data.get("type_definitions", {}),
+            data.get("type_references", {}),
+        )
+    return {}, {}
+
+
+def _build_type_desc_map(type_defs):
+    return {
+        tname: info.get("type_description", "")
+        for tname, info in type_defs.items()
+        if isinstance(info, dict) and info.get("type_description")
+    }
+
+
+def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir):
+    """Generate one .md file per function."""
+    type_defs, type_refs = _load_types(types_json)
+    type_desc_map = _build_type_desc_map(type_defs)
+    os.makedirs(output_dir, exist_ok=True)
+
+    for _, _, raw_func in iter_progress(function_list, "Generating markdown"):
+        func = normalize_function_for_doc(raw_func)
+        fname = func.get("name", "unknown_func")
+        lines = [f"# {fname}", ""]
+        lines += _write_function_section(func, type_refs, type_desc_map, figures_dir)[1:]  # skip the ## header
+
+        safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
+        with open(os.path.join(output_dir, f"{safe_name}.md"), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+
+def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir):
+    """Generate one .md file per source file, grouping functions together."""
+    type_defs, type_refs = _load_types(types_json)
+    type_desc_map = _build_type_desc_map(type_defs)
+    os.makedirs(output_dir, exist_ok=True)
+
+    grouped = defaultdict(list)
+    for func in function_list:
+        grouped[func.get("file", "unknown")].append(func)
+
+    items = list(grouped.items())
+    for _, _, (file_path, funcs) in iter_progress(items, "Generating markdown"):
+        base = os.path.splitext(os.path.basename(file_path))[0]
+        safe_base = base.replace("\\", "_").replace("/", "_").replace(":", "_")
+
+        lines = [f"# {base}.c", f"", f"**Source file: {file_path}**", "", f"Functions: {len(funcs)}", ""]
+
+        for raw_func in funcs:
+            func = normalize_function_for_doc(raw_func)
+            lines += _write_function_section(func, type_refs, type_desc_map, figures_dir)
+            lines.append("---")
+            lines.append("")
+
+        with open(os.path.join(output_dir, f"{safe_base}.md"), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+
+def generate_function_md(functions_json=None, function_list=None, types_json=None,
+                         figures_dir=None, output_dir="MD", group_by="function"):
     if function_list is not None:
         functions = function_list
     else:
@@ -58,126 +200,12 @@ def generate_function_md(functions_json=None, function_list=None, types_json=Non
             func_data = json.load(f)
         functions = func_data.get("functions", [])
 
-    # 加载类型定义（必须）
     if types_json is None:
         raise ValueError("types_json must be provided")
-    if os.path.exists(types_json):
-        with open(types_json, "r", encoding="utf-8") as f:
-            type_data = json.load(f)
-        type_defs = type_data.get("type_definitions", {})
-        type_refs = type_data.get("type_references", {})
+    if figures_dir is None:
+        raise ValueError("figures_dir must be provided")
+
+    if group_by == "file":
+        generate_function_md_by_file(functions, types_json, figures_dir, output_dir)
     else:
-        type_defs = {}
-        type_refs = {}
-
-    # 构建类型描述映射
-    type_desc_map = {}
-    for tname, info in type_defs.items():
-        if isinstance(info, dict):
-            desc = info.get("type_description", "")
-            if desc:
-                type_desc_map[tname] = desc
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    for _, _, raw_func in iter_progress(functions, "Generating markdown"):
-        func = normalize_function_for_doc(raw_func)
-        fname = func.get("name", "unknown_func")
-        md_lines = [f"# {fname}", "", f"**function：{fname}**", ""]
-
-        # 输入项表格
-        md_lines.append("## 输入项")
-        md_lines.append("| 标识符ID | 类型Type | 输入方式Input mode | 数据方向Direction of data | 描述Description |")
-        md_lines.append("|----------|----------|--------------------|---------------------------|------------------|")
-
-        inputs = func.get("inputs", [])
-        if inputs:
-            for inp in inputs:
-                name = inp.get("name", "N/A")
-                typ = inp.get("type", "N/A")
-                mode = "Parameter" if inp.get("kind") == "parameter" else "Global variable"
-                direction = inp.get("direction", "in")
-                desc = inp.get("inputs_description", "")
-                if not desc:
-                    desc = "N/A"
-                md_lines.append(f"| {name} | {typ} | {mode} | {direction} | {desc} |")
-        else:
-            md_lines.append("| N/A | N/A | N/A | N/A | N/A |")
-        md_lines.append("")
-
-        # 输出项表格
-        md_lines.append("## 输出项")
-        md_lines.append("| 标识符ID | 类型Type | 输出方式Output mode | 描述Description |")
-        md_lines.append("|----------|----------|---------------------|------------------|")
-
-        returns = func.get("returns", [])
-        if returns and isinstance(returns, list):
-            valid_returns = [ret for ret in returns if ret.get("expression") or ret.get("return_description")]
-            if valid_returns:
-                for ret in valid_returns:
-                    expr = ret.get("expression", "")
-                    ret_desc = ret.get("return_description", "")
-                    if not ret_desc:
-                        ret_desc = "N/A"
-                    md_lines.append(f"| {expr} | N/A | Return | {ret_desc} |")
-            else:
-                md_lines.append("| N/A | N/A | N/A | N/A |")
-        else:
-            md_lines.append("| N/A | N/A | N/A | N/A |")
-        md_lines.append("")
-
-        # 全局数据结构
-        global_types = {}
-        for inp in inputs:
-            if inp.get("kind") == "Global variable":
-                typ = inp.get("type", "")
-                ref = inp.get("type_ref", "")
-                if typ and ref and ref not in ("", "NA", "N/A"):
-                    if typ not in global_types:
-                        global_types[typ] = ref
-
-        md_lines.append("## 全局数据结构")
-        md_lines.append("| 类型Type | 参考Ref | 描述Description |")
-        md_lines.append("|----------|---------|------------------|")
-
-        if global_types:
-            for typ, ref in global_types.items():
-                base_type = typ.split('[')[0].strip()
-                base_type = base_type.rstrip('*').strip()
-                ref_code = type_refs.get(base_type, ref)
-                desc = type_desc_map.get(base_type, "")
-                if not desc:
-                    desc = "N/A"
-                md_lines.append(f"| {typ} | {ref_code} | {desc} |")
-        else:
-            md_lines.append("| N/A | N/A | N/A |")
-        md_lines.append("")
-
-        # 局部数据结构（占位）
-        md_lines.append("## 局部数据结构")
-        md_lines.append("| 类型Type | 参考Ref | 描述Description |")
-        md_lines.append("|----------|---------|------------------|")
-        md_lines.append("| N/A | N/A | N/A |")
-        md_lines.append("")
-
-        # 算法和逻辑
-        algo = func.get("algorithm_logic", "")
-        md_lines.append("## 算法和逻辑")
-        md_lines.append(algo)
-        md_lines.append("")
-
-        # 接口（调用关系图）
-        img_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_") + ".png"
-        if figures_dir is None:
-            raise ValueError("figures_dir must be provided")
-        img_abs_path = os.path.join(figures_dir, img_name)
-        rel_img_path = os.path.relpath(img_abs_path, start=output_dir)
-        md_lines.append("## 接口")
-        md_lines.append(f"![]({rel_img_path})")
-        md_lines.append("")
-
-        # 保存 MD 文件
-        safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
-        md_path = os.path.join(output_dir, f"{safe_name}.md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(md_lines))
+        generate_function_md_per_function(functions, types_json, figures_dir, output_dir)

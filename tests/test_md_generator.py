@@ -5,6 +5,8 @@ import pytest
 from generators.markdown.functions import (
     normalize_function_for_doc,
     generate_function_md,
+    generate_function_md_by_file,
+    _write_function_section,
 )
 from generators.markdown.appendix import (
     generate_appendix_md,
@@ -248,6 +250,78 @@ class TestGenerateFunctionMd:
 
         content = open(os.path.join(output_dir, "empty_func.md"), "r", encoding="utf-8").read()
         assert "N/A" in content
+
+
+class TestGroupByFile:
+    def test_generates_one_md_per_source_file(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_by_file")
+        figures_dir = str(tmp_path / "figures_by_file")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        generate_function_md_by_file(sample_functions, sample_types_json, figures_dir, output_dir)
+
+        # Should produce one .md per unique file
+        files = {func["file"] for func in sample_functions}
+        for file_path in files:
+            base = os.path.splitext(os.path.basename(file_path))[0]
+            md_path = os.path.join(output_dir, f"{base}.md")
+            assert os.path.exists(md_path), f"Missing {base}.md"
+
+    def test_file_md_contains_all_functions(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_by_file2")
+        figures_dir = str(tmp_path / "figures_by_file2")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        generate_function_md_by_file(sample_functions, sample_types_json, figures_dir, output_dir)
+
+        # main.c has: main, init, process
+        main_md = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "## main" in main_md
+        assert "## init" in main_md
+        assert "## process" in main_md
+
+    def test_group_by_file_via_generate_function_md(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_group_file")
+        figures_dir = str(tmp_path / "figures_group")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            group_by="file",
+        )
+
+        assert os.path.exists(os.path.join(output_dir, "main.md"))
+
+    def test_default_group_by_is_function(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_default")
+        figures_dir = str(tmp_path / "figures_default")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        assert os.path.exists(os.path.join(output_dir, "main.md"))
+        assert os.path.exists(os.path.join(output_dir, "init.md"))
+        assert os.path.exists(os.path.join(output_dir, "process.md"))
 
 
 class TestGenerateAppendixMd:
