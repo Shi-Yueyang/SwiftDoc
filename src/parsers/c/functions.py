@@ -399,52 +399,46 @@ def is_missing_algorithm_logic(func):
 
 
 # 分析c文件
-def refresh_functions(
-    project_dir,
-    types_json_path,
-    globals_json_path,
-    output_json_path,
-    enable_ai=True,
-):
-
-    with open(types_json_path, "r", encoding="utf-8") as f:
-        types_data = json.load(f)
-        type_refs = types_data.get("type_references", {})
-
-    type_descriptions = {
-        name: info["type_description"]
-        for name, info in types_data.get("type_definitions", {}).items()
-        if isinstance(info, dict) and "type_description" in info
-    }
-
-    with open(globals_json_path, "r", encoding="utf-8") as f:
-        globals_data = json.load(f)
-        global_lookup = build_global_lookup(globals_data.get("globals", []))
-
+def scan_all_functions(project_dir, types_data, global_vars):
+    """Scan .c files and return a list of function dicts (no cache I/O)."""
     c_files = collect_source_files(project_dir, (".c",))
     if not c_files:
         logger.debug("No .c files found in %s", project_dir)
-        return
+        return []
 
+    type_refs = types_data.get("type_references", {})
+    global_lookup = build_global_lookup(global_vars)
     all_functions = []
     for cf in c_files:
         funcs = extract_functions_from_c_file(cf, type_refs, global_lookup)
-        for func in funcs:
-            all_functions.append(func)
-    known_function_names = {func["name"] for func in all_functions}
+        all_functions.extend(funcs)
 
-    # 构建调用关系 called_by（谁调用了当前函数）
+    # Resolve called_by
+    known_names = {func["name"] for func in all_functions}
     called_by_map = {}
     for func in all_functions:
-        caller = func["name"]
-        for callee in func["calls"]:
-            if callee in known_function_names:
-                called_by_map.setdefault(callee, []).append(caller)
+        for callee in func.get("calls", []):
+            if callee in known_names:
+                called_by_map.setdefault(callee, []).append(func["name"])
     for callee, callers in called_by_map.items():
         called_by_map[callee] = list(set(callers))
     for func in all_functions:
         func["called_by"] = called_by_map.get(func["name"], [])
 
+    return all_functions
+
+
+def refresh_functions(
+    all_functions,
+    output_json_path,
+    types_data,
+    enable_ai=True,
+):
+    type_descriptions = {
+        name: info["type_description"]
+        for name, info in types_data.get("type_definitions", {}).items()
+        if isinstance(info, dict) and "type_description" in info
+    }
     previous_data, loaded_from = load_previous_function_cache(output_json_path)
     previous_functions = previous_data.get("functions", [])
     def _func_key(f):

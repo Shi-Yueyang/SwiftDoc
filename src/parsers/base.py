@@ -7,36 +7,34 @@ Register with parsers.register_parser().
 
 from abc import ABC, abstractmethod
 
+from parsers.types import GlobalVar, TypesData, FuncDef
+
 
 class BaseParser(ABC):
     language: str = ""
-    source_extensions: tuple = ()
-    header_extensions: tuple = ()
+    source_extensions: tuple[str, ...] = ()
+    header_extensions: tuple[str, ...] = ()
     supports_types: bool = True
     supports_globals: bool = True
 
     @abstractmethod
-    def extract_functions(self, project_dir, types_json_path, globals_json_path,
-                          output_json_path, enable_ai=True):
-        """Parse source files under project_dir and write function data to output_json_path.
-
-        Returns the path to the written functions JSON file.
-        """
+    def extract_functions(
+        self,
+        project_dir: str,
+        output_json_path: str,
+        types_data: TypesData,
+        global_vars: list[GlobalVar],
+        enable_ai: bool = True,
+    ) -> list[FuncDef]:
+        """Parse source files, refresh cache, and return function dicts."""
         ...
 
-    def extract_globals(self, project_dir):
-        """Return a list of global variable dicts found under project_dir.
-
-        Override if the language has global/static variable declarations.
-        Default returns an empty list.
-        """
+    def extract_globals(self, project_dir: str) -> list[GlobalVar]:
+        """Return global variable dicts found under *project_dir*."""
         return []
 
-    def extract_types(self, project_dir, cache_dir, enable_ai=True):
-        """Extract type definitions, diff against cache, enrich with AI, and write back.
-
-        Returns the path to the types cache JSON file.
-        Override if the language has type definitions separate from function bodies.
-        Default returns an empty string (no types file).
-        """
-        return ""
+    def extract_types(
+        self, project_dir: str, cache_dir: str, enable_ai: bool = True
+    ) -> TypesData:
+        """Extract, refresh, persist, and return type metadata for *project_dir*."""
+        return {"description": "", "type_definitions": {}, "type_references": {}}

@@ -109,12 +109,11 @@ def is_missing_type_description(type_definition):
     return description == AI_FAILED
 
 
-def refresh_type_definitions(project_dir, output_dir=".analysis", enable_ai=True):
+def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", enable_ai=True):
     folder_name = os.path.basename(os.path.normpath(project_dir))
     cache_path = os.path.join(output_dir, f"{folder_name}_global_types.json")
     previous_data, loaded_from = load_previous_type_cache(cache_path)
     previous_types = previous_data.get("type_definitions", {})
-    fresh_types = scan_project_types(project_dir)
     diff = compare_types(previous_types, fresh_types)
 
     added = diff.get("added", {})
@@ -198,7 +197,7 @@ def refresh_type_definitions(project_dir, output_dir=".analysis", enable_ai=True
 
     logger.debug("Type definitions saved to %s", cache_path)
     logger.debug("Total types found: %s", len(master_types))
-    return cache_path
+    return master_data
 
 
 def collect_type_definitions_with_comments(header_text, source_file):

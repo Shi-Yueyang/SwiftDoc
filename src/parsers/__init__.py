@@ -8,8 +8,8 @@ Each parser instance provides:
     supports_types: bool
     supports_globals: bool
     extract_globals(project_dir) -> list[dict]
-    extract_types(project_dir, cache_dir, enable_ai) -> str
-    extract_functions(project_dir, types_json, globals_json, output_json, enable_ai) -> str
+    extract_types(project_dir, cache_dir, enable_ai) -> dict
+    extract_functions(project_dir, output_json_path, types_data, global_vars, enable_ai) -> list[dict]
 """
 
 from parsers.c import CParser

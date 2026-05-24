@@ -53,26 +53,25 @@ def run_extract_phase(args):
     analysis_paths = build_analysis_paths(args.cache_dir, project_root)
 
 
-    if parser.supports_globals:
-        extract_global_variables(project_root, analysis_paths["globals"], args.language)
-    else:
-        # Write an empty globals file so downstream steps don't break
-        with open(analysis_paths["globals"], "w", encoding="utf-8") as f:
-            json.dump({"globals": []}, f)
+    # --- Globals ---
+    global_vars = parser.extract_globals(project_root)
+    with open(analysis_paths["globals"], "w", encoding="utf-8") as f:
+        json.dump({"globals": global_vars}, f, indent=2, ensure_ascii=False)
+    logger.info("Found %s global variables", len(global_vars))
 
-    if parser.supports_types:
-        global_types_json_file = parser.extract_types(
-            project_root, args.cache_dir, enable_ai=enable_ai,
-        )
-    else:
-        global_types_json_file = ""
-        logger.info("Skipping type extraction (not supported for %s)", args.language)
+    # --- Types ---
+    types_data = parser.extract_types(
+        project_root,
+        args.cache_dir,
+        enable_ai=enable_ai,
+    )
 
+    # --- Functions ---
     parser.extract_functions(
-        project_dir=project_root,
-        types_json_path=global_types_json_file,
-        globals_json_path=analysis_paths["globals"],
+        project_root,
         output_json_path=analysis_paths["functions"],
+        types_data=types_data,
+        global_vars=global_vars,
         enable_ai=enable_ai,
     )
 
