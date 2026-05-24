@@ -104,7 +104,9 @@ def summarize_ai_result(description):
 
 def is_missing_type_description(type_definition):
     description = type_definition.get("type_description")
-    return not isinstance(description, str) or not description.strip()
+    if not isinstance(description, str) or not description.strip():
+        return True
+    return description == AI_FAILED
 
 
 def refresh_type_definitions(project_dir, output_dir=".analysis", enable_ai=True):
@@ -149,7 +151,6 @@ def refresh_type_definitions(project_dir, output_dir=".analysis", enable_ai=True
         fresh_definition = copy.deepcopy(
             modified.get(type_name) or added.get(type_name) or fresh_types[type_name]
         )
-        fresh_definition.pop("_old_preview", None)
         if not enable_ai:
             fresh_definition["type_description"] = ""
             logger.debug("Left description empty for type without AI: %s", type_name)

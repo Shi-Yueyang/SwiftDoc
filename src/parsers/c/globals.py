@@ -43,10 +43,15 @@ def collect_globals_from_c_file(c_file_path):
             declarator = node.child_by_field_name('declarator')
             if declarator and declarator.type == 'function_declarator':
                 return
-            has_static = any(
-                child.type == 'storage_class_specifier' and get_node_text(child) == 'static'
+            storage_specs = [
+                get_node_text(child)
                 for child in node.children
-            )
+                if child.type == 'storage_class_specifier'
+            ]
+            has_static = 'static' in storage_specs
+            has_extern = 'extern' in storage_specs
+            if has_extern:
+                return  # extern in .c is just a declaration, skip
             var_name_node = find_identifier(node)
             if var_name_node is None:
                 return
@@ -142,14 +147,15 @@ def extract_all_globals(project_dir):
         vars_list = collect_globals_from_c_file(cf)
         for v in vars_list:
             global_key = get_global_key(v)
-            if global_key not in all_globals:
+            existing = all_globals.get(global_key)
+            if existing is None:
+                all_globals[global_key] = v
+            elif existing.get("kind") == "extern" and v.get("kind") == "definition":
                 all_globals[global_key] = v
             else:
                 logger.warning(
                     "Duplicate definition of '%s' in %s, previous in %s",
-                    v["name"],
-                    cf,
-                    all_globals[global_key]["file"],
+                    v["name"], cf, existing["file"],
                 )
 
     for hf in h_files:
@@ -158,6 +164,7 @@ def extract_all_globals(project_dir):
             global_key = get_global_key(v)
             if global_key not in all_globals:
                 all_globals[global_key] = v
+            # If a definition already exists, don't overwrite with extern
 
     return list(all_globals.values())
 

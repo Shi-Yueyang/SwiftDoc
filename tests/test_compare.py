@@ -102,7 +102,6 @@ class TestCompareTypes:
         new = {"A": {"kind": "struct", "members": ["int x", "int y"]}}
         result = compare_types(old, new)
         assert list(result["modified"].keys()) == ["A"]
-        assert "_old_preview" in result["modified"]["A"]
 
     def test_type_description_change_is_ignored(self):
         old = {"A": {"kind": "struct", "members": ["int x"], "type_description": "old desc"}}
@@ -115,3 +114,40 @@ class TestCompareTypes:
         new = {"A": {"kind": "typedef", "original_type": "int"}}
         result = compare_types(old, new)
         assert result == {"added": {}, "modified": {}, "removed": {}}
+
+    def test_source_file_change_is_ignored(self):
+        old = {"A": {"kind": "struct", "members": ["int x"], "source_file": "a.h"}}
+        new = {"A": {"kind": "struct", "members": ["int x"], "source_file": "b.h"}}
+        result = compare_types(old, new)
+        assert result["modified"] == {}
+
+    def test_comment_change_is_ignored(self):
+        old = {"A": {"kind": "struct", "members": ["int x"], "comment": "old comment"}}
+        new = {"A": {"kind": "struct", "members": ["int x"], "comment": "new comment"}}
+        result = compare_types(old, new)
+        assert result["modified"] == {}
+
+    def test_type_rename_correlation_transfers_description(self):
+        old = {"OldName": {"kind": "struct", "members": ["int x"], "type_description": "desc"}}
+        new = {"NewName": {"kind": "struct", "members": ["int x"]}}
+        result = compare_types(old, new)
+        assert "OldName" not in result["removed"]
+        assert result["added"]["NewName"]["type_description"] == "desc"
+
+    def test_function_with_same_name_different_file_treated_separately(self):
+        old = [{"name": "helper", "file": "a.c", "normalized_body": "bodyA"}]
+        new = [{"name": "helper", "file": "b.c", "normalized_body": "bodyA"}]
+        result = compare_functions(old, new)
+        assert len(result["added"]) == 1
+        assert len(result["removed"]) == 1
+        assert result["added"][0]["file"] == "b.c"
+
+    def test_function_rename_correlation_transfers_descriptions(self):
+        old = [{"name": "old_func", "file": "a.c", "normalized_body": "bodyX", "algorithm_logic": "logic"}]
+        new_list = [{"name": "new_func", "file": "a.c", "normalized_body": "bodyX"}]
+        result = compare_functions(old, new_list)
+        assert len(result["added"]) == 1
+        assert len(result["removed"]) == 1
+        assert new_list[0]["algorithm_logic"] == "logic"
+        assert new_list[0].get("_renamed_from") == "old_func"
+

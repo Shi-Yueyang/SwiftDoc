@@ -312,6 +312,9 @@ class TestIsMissingAlgorithmLogic:
     def test_present(self):
         assert not is_missing_algorithm_logic({"algorithm_logic": "Does something."})
 
+    def test_ai_failed_logic(self):
+        assert is_missing_algorithm_logic({"algorithm_logic": AI_FAILED})
+
 
 class TestSummarizeAiResult:
     def test_success(self):

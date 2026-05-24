@@ -166,6 +166,9 @@ class TestIsMissingTypeDescription:
     def test_non_string_description(self):
         assert is_missing_type_description({"type_description": 123})
 
+    def test_ai_failed_description(self):
+        assert is_missing_type_description({"type_description": AI_FAILED})
+
 
 class TestSummarizeAiResult:
     def test_success(self):

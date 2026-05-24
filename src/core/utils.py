@@ -1,12 +1,9 @@
 import os
 import sys
 import platform
-import logging
 from pathlib import Path
 
 import chardet
-
-logger = logging.getLogger(__name__)
 
 
 def enable_ansi_support():
@@ -97,27 +94,33 @@ def iter_progress(items, label, width=24):
         sys.stderr.flush()
 
 
+_walk_cache = {}
+
+
 def collect_source_files(project_dir, extensions):
     """Walk project_dir (or handle a single file) and return files matching any of the given extensions.
 
-    Args:
-        project_dir: Root directory path, or a single file path.
-        extensions: Tuple of extensions to match (e.g. ('.c', '.h')).
-
-    Returns:
-        List of absolute file paths sorted by name.
+    Results are cached per (project_dir, extensions) so multiple calls with the same
+    arguments reuse the file list and only log counts once.
     """
+    cache_key = (os.path.abspath(project_dir), tuple(extensions))
+    if cache_key in _walk_cache:
+        return _walk_cache[cache_key]
+
     files = []
     if os.path.isfile(project_dir):
         if any(project_dir.endswith(ext) for ext in extensions):
-            files.append(project_dir)
+            files.append(os.path.abspath(project_dir))
     else:
         for root, _, filenames in os.walk(project_dir):
             for f in filenames:
                 if any(f.endswith(ext) for ext in extensions):
-                    files.append(os.path.join(root, f))
+                    files.append(os.path.abspath(os.path.join(root, f)))
     files.sort()
-    if files and not os.path.isfile(project_dir):
-        ext_list = ", ".join(extensions)
-        logger.info("Found %s files (%s)", len(files), ext_list)
+    _walk_cache[cache_key] = files
+
+    if files:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("Found %s files (%s)", len(files), ", ".join(extensions))
     return files

@@ -52,6 +52,7 @@ def run_extract_phase(args):
     project_root = os.path.normpath(args.root_dir)
     analysis_paths = build_analysis_paths(args.cache_dir, project_root)
 
+
     if parser.supports_globals:
         extract_global_variables(project_root, analysis_paths["globals"], args.language)
     else:
@@ -118,7 +119,7 @@ def run_docgen_phase(args):
     for func in all_functions:
         func_file = os.path.normpath(func["file"])
         for nd in normalized_dirs:
-            if func_file.startswith(nd):
+            if func_file == nd or func_file.startswith(nd + os.sep):
                 if func["name"] not in seen:
                     selected_funcs.append(func)
                     seen.add(func["name"])

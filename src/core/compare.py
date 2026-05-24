@@ -11,65 +11,113 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_STRUCTURAL_TYPE_KEYS = frozenset({"kind", "members", "values", "original_type"})
 
-# 对比函数
+
 def compare_functions(old_funcs, new_funcs):
+    """Compare two function lists and return added, modified, and removed.
+
+    Keys functions by (name, file) so that static helpers with the same
+    name in different translation units don't collide.
+
+    Also detects renames: if a function is removed and another with
+    identical normalized_body is added, transfers AI descriptions.
     """
-    对比两个函数列表，返回差异字典。
-    old_funcs: 上一版本的函数列表（列表，每个元素为函数字典）
-    new_funcs: 当前版本的函数列表
-    返回:
-        {
-            "added": [完整函数定义],
-            "modified": [{"old": 旧版本完整函数定义, "new": 新版本完整函数定义}],
-            "removed": [完整函数定义]
-        }
-    """
-    old_dict = {f["name"]: f for f in old_funcs}
-    new_dict = {f["name"]: f for f in new_funcs}
+    old_dict = {(f["name"], f.get("file", "")): f for f in old_funcs}
+    new_dict = {(f["name"], f.get("file", "")): f for f in new_funcs}
 
     added = []
     modified = []
     removed = []
+    renames = []
 
-    all_names = set(old_dict.keys()) | set(new_dict.keys())
-    for name in all_names:
-        old_func = old_dict.get(name)
-        new_func = new_dict.get(name)
+    old_keys = set(old_dict.keys())
+    new_keys = set(new_dict.keys())
+
+    matched_new = set()
+
+    for key in sorted(old_keys | new_keys):
+        old_func = old_dict.get(key)
+        new_func = new_dict.get(key)
         if old_func is None:
             added.append(new_func)
+            matched_new.add(key)
         elif new_func is None:
             removed.append(old_func)
         else:
+            matched_new.add(key)
             old_body = old_func.get("normalized_body", "")
             new_body = new_func.get("normalized_body", "")
             if old_body != new_body:
-                modified.append({
-                    "old": old_func,
-                    "new": new_func
-                })
+                modified.append({"old": old_func, "new": new_func})
+
+    # Rename correlation: if a removed function has the same normalized_body
+    # as a newly-added function, transfer AI descriptions.
+    removed_by_body = {}
+    for func in removed:
+        body = func.get("normalized_body", "")
+        if body:
+            removed_by_body.setdefault(body, []).append(func)
+
+    for func in added:
+        if (func["name"], func.get("file", "")) in matched_new:
+            body = func.get("normalized_body", "")
+            candidates = removed_by_body.get(body, [])
+            if candidates:
+                old = candidates.pop(0)
+                if old["name"] == func["name"]:
+                    continue  # same name, different file — not a rename
+                for field in ("algorithm_logic", "inputs_description", "return_description"):
+                    if old.get(field) and not func.get(field):
+                        func[field] = old[field]
+                func["_renamed_from"] = old.get("_renamed_from", old["name"])
+                logger.info("Renamed function: %s -> %s (transferred descriptions)", old["name"], func["name"])
+
     return {"added": added, "modified": modified, "removed": removed}
 
 
-# 对比类型
 def compare_types(old_types, new_types):
+    """Compare two type-definition dicts and return added, modified, and removed.
+
+    Only structural keys (kind, members, values, original_type) are compared.
+    source_file and comment changes are ignored — they don't trigger AI re-runs.
+
+    Rename correlation: if a type is removed and another of the same kind
+    with identical members/values is added, transfers type_description.
+    """
     added = {}
     modified = {}
     removed = {}
+
     all_names = set(old_types.keys()) | set(new_types.keys())
-    for name in all_names:
+    for name in sorted(all_names):
         old_def = old_types.get(name)
         new_def = new_types.get(name)
         if old_def is None:
-            added[name] = new_def
+            added[name] = dict(new_def)
         elif new_def is None:
-            removed[name] = old_def
+            removed[name] = dict(old_def)
         else:
-            # 比较核心定义（忽略 type_description）
-            old_core = {k: v for k, v in old_def.items() if k != 'type_description'}
-            new_core = {k: v for k, v in new_def.items() if k != 'type_description'}
+            old_core = {k: v for k, v in old_def.items() if k in _STRUCTURAL_TYPE_KEYS}
+            new_core = {k: v for k, v in new_def.items() if k in _STRUCTURAL_TYPE_KEYS}
             if old_core != new_core:
-                # 提供新旧定义的简要预览
-                modified[name] = new_def
-                modified[name]['_old_preview'] = str(old_core)[:200]
+                modified[name] = dict(new_def)
+
+    # Rename correlation: match removed types to added types by kind + structure
+    for old_name, old_def in list(removed.items()):
+        old_core = {k: v for k, v in old_def.items() if k in _STRUCTURAL_TYPE_KEYS}
+        if not old_core:
+            continue
+        for new_name, new_def in list(added.items()):
+            new_core = {k: v for k, v in new_def.items() if k in _STRUCTURAL_TYPE_KEYS}
+            if old_core == new_core and old_def.get("kind") == new_def.get("kind"):
+                if old_name == new_name:
+                    continue
+                new_def["type_description"] = old_def.get("type_description", "")
+                new_def["_renamed_from"] = old_def.get("_renamed_from", old_name)
+                removed.pop(old_name)
+                added[new_name] = new_def
+                logger.info("Renamed type: %s -> %s (transferred description)", old_name, new_name)
+                break
+
     return {"added": added, "modified": modified, "removed": removed}

@@ -49,9 +49,13 @@ def find_parameters(declarator_node):
             if param_name_node is None:
                 continue
             param_name = get_node_text(param_name_node)
-            full_text = get_node_text(param)
-            param_type = full_text.replace(param_name, "").strip()
-            param_type = param_type.rstrip(",").strip()
+            type_node = param.child_by_field_name("type")
+            if type_node is not None:
+                param_type = get_node_text(type_node).strip()
+            else:
+                full_text = get_node_text(param)
+                param_type = full_text.replace(param_name, "").strip()
+                param_type = param_type.rstrip(",").strip()
             params.append({"name": param_name, "type": param_type})
     return params
 
@@ -80,9 +84,8 @@ def find_return_statements(func_body_node):
 def get_type_ref(type_str, type_refs):
     import re
 
-    match = re.search(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", type_str)
-    if match:
-        base = match.group(1)
+    matches = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", type_str)
+    for base in reversed(matches):
         if base in type_refs:
             return type_refs[base]
     if type_str in type_refs:
@@ -390,7 +393,9 @@ def summarize_ai_result(description):
 
 def is_missing_algorithm_logic(func):
     logic = func.get("algorithm_logic")
-    return not isinstance(logic, str) or not logic.strip()
+    if not isinstance(logic, str) or not logic.strip():
+        return True
+    return logic == AI_FAILED
 
 
 # 分析c文件
@@ -442,6 +447,9 @@ def refresh_functions(
 
     previous_data, loaded_from = load_previous_function_cache(output_json_path)
     previous_functions = previous_data.get("functions", [])
+    def _func_key(f):
+        return (f["name"], f["file"])
+
     diff = compare_functions(previous_functions, all_functions)
 
     added = diff.get("added", [])
@@ -449,38 +457,32 @@ def refresh_functions(
     removed = diff.get("removed", [])
     changed_functions = [*added, *(item["new"] for item in modified)]
     if enable_ai:
-        missing_logic_names = {
-            func["name"]
+        missing_logic_keys = {
+            _func_key(func)
             for func in previous_functions
             if is_missing_algorithm_logic(func)
         }
-        changed_function_map = {func["name"]: func for func in changed_functions}
+        changed_function_map = {_func_key(func): func for func in changed_functions}
         for func in all_functions:
-            if func["name"] in missing_logic_names:
-                changed_function_map[func["name"]] = func
+            if _func_key(func) in missing_logic_keys:
+                changed_function_map[_func_key(func)] = func
         changed_functions = list(changed_function_map.values())
 
-    logger.debug(
-        "Function changes: added=%s modified=%s removed=%s",
-        len(added),
-        len(modified),
-        len(removed),
-    )
-
     output_data = {"functions": copy.deepcopy(previous_functions)}
-    function_map = {func["name"]: func for func in output_data["functions"]}
+    function_map = {_func_key(func): func for func in output_data["functions"]}
 
     for func in removed:
-        if func["name"] in function_map:
-            del function_map[func["name"]]
-            logger.debug("Removed function: %s", func["name"])
+        key = _func_key(func)
+        if key in function_map:
+            del function_map[key]
+            logger.debug("Removed function: %s (%s)", func["name"], func.get("file"))
 
     for func in changed_functions:
         fresh_function = copy.deepcopy(func)
         if not enable_ai:
             fresh_function["algorithm_logic"] = ""
         prepare_function_metadata(fresh_function, type_descriptions)
-        function_map[fresh_function["name"]] = fresh_function
+        function_map[_func_key(fresh_function)] = fresh_function
 
     should_persist_now = bool(
         changed_functions
@@ -500,7 +502,7 @@ def refresh_functions(
         else:
             logger.info(highlight_message("No functions require AI refresh"))
         for index, func in enumerate(changed_functions, start=1):
-            current_function = function_map[func["name"]]
+            current_function = function_map[_func_key(func)]
             description = enrich_function_with_ai(current_function, type_descriptions)
             status, preview = summarize_ai_result(description)
             logger.info(
