@@ -4,7 +4,7 @@ import logging
 from textwrap import dedent
 from openai import OpenAI
 
-from config_manager import get_missing_ai_keys, resolve_ai_config, load_ai_call_params
+from config.manager import get_missing_ai_keys, resolve_ai_config, load_ai_call_params
 
 
 logger = logging.getLogger(__name__)

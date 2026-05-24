@@ -1,0 +1,2 @@
+from generators.markdown.functions import generate_function_md as generate_functions
+from generators.markdown.appendix import generate_appendix_md as generate_appendix

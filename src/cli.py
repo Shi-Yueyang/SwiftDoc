@@ -4,9 +4,9 @@ import argparse
 import logging
 import os
 import sys
-from config_manager import ensure_ai_config_interactive, rerun_ai_config_interactive, set_config_value
+from config.manager import ensure_ai_config_interactive, rerun_ai_config_interactive, set_config_value
 from pipeline import build_analysis_paths, run_extract_phase, run_docgen_phase
-from utils import get_default_cache_dir
+from core.utils import get_default_cache_dir
 
 
 def configure_logging(verbose=False):
@@ -23,17 +23,16 @@ def configure_logging(verbose=False):
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
-def validate_paths(root_dir, analyse_dir):
+def validate_paths(root_dir, analyse_dirs):
     root_path = os.path.abspath(root_dir)
-    analyse_path = os.path.abspath(analyse_dir)
-
-    try:
-        common_path = os.path.commonpath([root_path, analyse_path])
-    except ValueError as exc:
-        raise ValueError("analyse_dir must be inside root_dir") from exc
-
-    if common_path != root_path:
-        raise ValueError("analyse_dir must be inside root_dir")
+    for analyse_dir in analyse_dirs:
+        analyse_path = os.path.abspath(analyse_dir)
+        try:
+            common_path = os.path.commonpath([root_path, analyse_path])
+        except ValueError as exc:
+            raise ValueError(f"analyse_dir must be inside root_dir: {analyse_dir}") from exc
+        if common_path != root_path:
+            raise ValueError(f"analyse_dir must be inside root_dir: {analyse_dir}")
 
 
 def validate_write_cache_files(root_dir, cache_dir):
@@ -48,43 +47,22 @@ def validate_write_cache_files(root_dir, cache_dir):
         )
 
 
-def normalize_argv(argv):
-    if not argv:
-        return argv
-
-    global_options = {"--verbose"}
-    insert_at = 0
-
-    while insert_at < len(argv) and argv[insert_at] in global_options:
-        insert_at += 1
-
-    if insert_at >= len(argv):
-        return argv
-
-    if argv[insert_at] in {"generate", "write", "config", "-h", "--help"}:
-        return argv
-
-    if argv[insert_at].startswith("-"):
-        return argv
-
-    return [*argv[:insert_at], "generate", *argv[insert_at:]]
-
-
 def build_parser(default_cache_dir):
     examples = """Examples:
   Generate documentation:
-    python src/cli.py generate ATP_CODE
-    python src/cli.py generate ATP_CODE --analyse_dir ATP_CODE/DMI
-    python src/cli.py generate ATP_CODE --analyse_dir ATP_CODE/DMI/dmi_input.c --cache_dir .analysis --output_folder out_docs --ai on
+    python -m cli generate examples/c
+    python -m cli generate examples/c --ai off
+    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
 
   Write from existing cache:
-    python src/cli.py write ATP_CODE --cache_dir .analysis --output_folder out_docs
+    python -m cli write examples/c --cache_dir .analysis --output_folder out_docs
 
   Configure AI:
-    python src/cli.py config
-    python src/cli.py config temperature 0.7
-    python src/cli.py config max_tokens 1500
-    python src/cli.py config retry_count 3
+    python -m cli config
+    python -m cli config temperature 0.7
+    python -m cli config max_tokens 1500
+    python -m cli config retry_count 3
 """
     parser = argparse.ArgumentParser(
         description="Analyze C project, generate markdown docs, and manage AI configuration",
@@ -100,12 +78,10 @@ def build_parser(default_cache_dir):
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     generate_examples = """Examples:
-    python src/cli.py generate ATP_CODE
-    python src/cli.py generate ATP_CODE --analyse_dir ATP_CODE/DMI
-    python src/cli.py generate ATP_CODE --analyse_dir ATP_CODE/DMI/dmi_input.c --cache_dir .analysis --output_folder out_docs --ai on
-
-Legacy form still works:
-    python src/cli.py ATP_CODE --analyse_dir ATP_CODE/DMI
+    python -m cli generate examples/c
+    python -m cli generate examples/c --ai off
+    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
 """
 
     generate_parser = subparsers.add_parser(
@@ -120,8 +96,9 @@ Legacy form still works:
     )
     generate_parser.add_argument(
         "--analyse_dir",
+        action="append",
         default=None,
-        help="Subset of root_dir to use for documentation generation (defaults to root_dir)",
+        help="Subset of root_dir to generate docs for (repeatable, defaults to root_dir)",
     )
     generate_parser.add_argument(
         "--cache_dir",
@@ -139,10 +116,20 @@ Legacy form still works:
         default="oo",
         help="Enable AI for type/function analysis and interactive onboarding when config is missing",
     )
+    generate_parser.add_argument(
+        "--lang",
+        default="c",
+        help="Source language for parsing (default: c)",
+    )
+    generate_parser.add_argument(
+        "--format",
+        default="markdown",
+        help="Output documentation format (default: markdown)",
+    )
 
     write_examples = """Examples:
-    python src/cli.py write ATP_CODE/MT
-    python src/cli.py write ATP_CODE --analyse_dir ATP_CODE/DMI --cache_dir .cache --output_folder out
+    python -m cli write examples/c --analyse_dir examples/c/bsw --cache_dir .analysis --output_folder out
+    python -m cli write examples/c --cache_dir .analysis --output_folder out
     """
 
     write_parser = subparsers.add_parser(
@@ -157,8 +144,9 @@ Legacy form still works:
     )
     write_parser.add_argument(
         "--analyse_dir",
+        action="append",
         default=None,
-        help="Subset of root_dir to use for documentation generation (defaults to root_dir)",
+        help="Subset of root_dir to generate docs for (repeatable, defaults to root_dir)",
     )
     write_parser.add_argument(
         "--cache_dir",
@@ -170,13 +158,23 @@ Legacy form still works:
         default="out",
         help="Output directory for markdown and figures",
     )
+    write_parser.add_argument(
+        "--lang",
+        default="c",
+        help="Source language that produced the cached analysis (default: c)",
+    )
+    write_parser.add_argument(
+        "--format",
+        default="markdown",
+        help="Output documentation format (default: markdown)",
+    )
 
     config_examples = """Examples:
-    python src/cli.py config
-    python src/cli.py --verbose config
-    python src/cli.py config temperature 0.7
-    python src/cli.py config max_tokens 1500
-    python src/cli.py config retry_count 3
+    python -m cli config
+    python -m cli --verbose config
+    python -m cli config temperature 0.7
+    python -m cli config max_tokens 1500
+    python -m cli config retry_count 3
     """
 
     config_parser = subparsers.add_parser(
@@ -203,7 +201,7 @@ Legacy form still works:
 def main():
     default_cache_dir = str(get_default_cache_dir())
     parser = build_parser(default_cache_dir)
-    cli_args = parser.parse_args(normalize_argv(sys.argv[1:]))
+    cli_args = parser.parse_args(sys.argv[1:])
     configure_logging(verbose=cli_args.verbose)
 
     if cli_args.command == "config":
@@ -219,10 +217,10 @@ def main():
             rerun_ai_config_interactive()
         return
 
-    analyse_dir = cli_args.analyse_dir or cli_args.root_dir
+    analyse_dirs = cli_args.analyse_dir or [cli_args.root_dir]
 
     try:
-        validate_paths(cli_args.root_dir, analyse_dir)
+        validate_paths(cli_args.root_dir, analyse_dirs)
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -230,11 +228,11 @@ def main():
         if cli_args.ai == "on":
             ensure_ai_config_interactive()
 
-        # 1. 提取阶段（不调用AI）
         extract_args = argparse.Namespace(
             root_dir=cli_args.root_dir,
             cache_dir=cli_args.cache_dir,
             ai=cli_args.ai,
+            language=getattr(cli_args, "lang", "c"),
         )
         run_extract_phase(extract_args)
     elif cli_args.command == "write":
@@ -243,12 +241,13 @@ def main():
         except ValueError as exc:
             parser.error(str(exc))
 
-    # 2. 文档生成阶段（调用AI）
+    # 2. Document generation phase
     docgen_args = argparse.Namespace(
         root_dir=cli_args.root_dir,
-        analyse_dir=analyse_dir,
+        analyse_dirs=analyse_dirs,
         cache_dir=cli_args.cache_dir,
         output_folder=cli_args.output_folder,
+        format=getattr(cli_args, "format", "markdown"),
     )
     run_docgen_phase(docgen_args)
 

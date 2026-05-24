@@ -1,108 +1,95 @@
-# aoto_md
+# auto-md
 
-## CLI Usage
+Multi-language code analysis CLI that generates documentation with call graphs.
 
-```bash
-python src/cli.py generate root_dir [--analyse_dir ANALYSE_DIR] [--cache_dir CACHE_DIR] [--output_folder OUTPUT_FOLDER] [--ai {on,off}]
-python src/cli.py config
-```
-
-Legacy generate form is still supported:
+## Quick Start
 
 ```bash
-python src/cli.py root_dir [--analyse_dir ANALYSE_DIR] [--cache_dir CACHE_DIR] [--output_folder OUTPUT_FOLDER] [--ai {on,off}]
+# Setup
+python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -e .
+
+# Run on the built-in C example (no AI needed)
+python -m cli generate examples/c --ai off
+
+# Open the generated docs
+#   out/          — markdown files per function
+#   out/figures/  — call-graph PNGs
+#   out/appendix.md — type definitions
 ```
 
 ## Commands
 
-- `generate`: extract project data and generate markdown documentation.
-- `config`: rerun the interactive AI onboarding flow and rewrite the user config if needed.
-
-## AI Configuration
-
-When `generate --ai on` is used, the CLI reads AI settings only from the per-user JSON config file.
-
-If AI is enabled and the config file is missing or incomplete, the CLI starts an interactive onboarding flow. It prompts for the missing values, tests the connection before saving, and only writes the config file after the test succeeds.
-
-Running `python src/cli.py config` always reruns onboarding, even if a complete config file already exists.
-
-When `generate --ai off` is used, onboarding is skipped entirely and extract/docgen runs without AI-generated descriptions.
-
-### User Config Location
-
-- Linux: `${XDG_CONFIG_HOME:-~/.config}/aoto-md/config.json`
-- macOS: `~/Library/Application Support/aoto-md/config.json`
-- Windows: `%APPDATA%\\aoto-md\\config.json`
-
-### Notes
-
-- `.env` and process environment variables are not used for AI configuration.
-- Secrets are not accepted through CLI arguments.
-- Interrupting onboarding with `Ctrl+C` exits cleanly without saving.
-
-### Positional Argument
-
-- `root_dir` (required): project root directory used for the extract phase.
-
-### Optional Arguments
-
-- `--analyse_dir`: subset of `root_dir` used for documentation generation. It can be a module directory or a single `.c` file. If omitted, defaults to `root_dir`.
-- `--cache_dir`: cache directory for intermediate JSON files. Default: `.analysis`.
-- `--output_folder`: output directory for markdown and figures. Default: `out`.
-- `--ai`: AI mode for type and function analysis. When `on`, missing config triggers interactive onboarding. Default: `off`.
-
-## Examples
+### `generate` — full analysis + docs
 
 ```bash
-python src/cli.py generate ATP_CODE
-python src/cli.py generate ATP_CODE --analyse_dir ATP_CODE/DMI
-python src/cli.py generate ATP_CODE/MT --analyse_dir ATP_CODE/MT --cache_dir .analysis --output_folder out --ai on
-python src/cli.py config
+# Entire project
+python -m cli generate examples/c --ai off
+
+# Specific subdirectories or files
+python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+
+# Single file
+python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --ai off
+
+# With custom cache/output paths
+python -m cli generate examples/c --cache_dir .analysis --output_folder out_docs --ai on
 ```
 
-The CLI now works in two stages:
+| Flag | Default | Description |
+|---|---|---|
+| `root_dir` | *(required)* | Project root for the extract phase |
+| `--analyse_dir` | root_dir | Subset to generate docs for (repeatable) |
+| `--cache_dir` | platform cache | Intermediate JSON directory |
+| `--output_folder` | `out` | Output directory for docs and figures |
+| `--ai` | `oo` | `on` / `off` for AI-generated descriptions |
+| `--lang` | `c` | Source language |
+| `--format` | `markdown` | Output documentation format |
+| `--verbose` | off | Enable debug logging |
 
-- Extract scans `root_dir` to build the shared cache.
-- Doc generation filters that extracted data down to `analyse_dir`.
-- `analyse_dir` must stay inside `root_dir`.
-
-## Offline Installation from Wheels
-
-To install the project in an offline environment using pre-downloaded wheels:
+### `write` — docs from existing cache only
 
 ```bash
-# Create virtual environment
-python -m venv .venv
-.venv\Scripts\activate  # On Windows
-# source .venv/bin/activate  # On Linux/macOS
-
-# Install from wheels directory (offline)
-pip install --no-index --find-links=wheels .
+python -m cli write examples/c --analyse_dir examples/c/bsw --cache_dir .analysis --output_folder out
 ```
 
-To download all dependencies as wheels for offline distribution:
+### `config` — manage AI settings
 
 ```bash
-# From the project root
-pip download . -d wheels
+python -m cli config                          # interactive onboarding
+python -m cli config temperature 0.7          # set single value
+python -m cli config max_tokens 1500
+python -m cli config retry_count 3
 ```
 
-This creates a `wheels/` directory containing all required `.whl` files that can be transported to other machines.
+Settings are stored per-user:
+
+| OS | Path |
+|---|---|
+| Linux | `~/.config/aoto-md/config.json` |
+| macOS | `~/Library/Application Support/aoto-md/config.json` |
+| Windows | `%APPDATA%\aoto-md\config.json` |
 
 ## Build Executable
 
-Build from the repository root with PyInstaller:
-
 ```bash
-python --version
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e .
-python -m pip install pyinstaller
+pip install pyinstaller
 pyinstaller --name auto-md --onefile --clean --paths src src/cli.py
+# dist/auto-md.exe  (or dist/auto-md on Linux/macOS)
 ```
 
-The standalone executable will be created under `dist/auto-md.exe`.
+## Project Structure
 
-./a u to-md
+```
+src/
+├── cli.py                     # entry point
+├── pipeline.py                # orchestrator
+├── config/manager.py          # AI settings
+├── core/                      # shared utils, AI, diff
+├── parsers/c/                 # C language parser
+├── generators/markdown/       # markdown doc generator
+└── generators/images.py       # call-graph generator
+
+examples/
+└── c/                         # sample C project for testing
+```

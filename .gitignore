@@ -16,11 +16,11 @@ env/
 .analysis/
 .cache/
 MD/
-ATP_CODE/
 build/
 dist/
 out/
 *.spec
+*.egg-info/
 
 # Tool caches
 .pytest_cache/

@@ -3,13 +3,9 @@ import json
 import logging
 import sys
 
-from extract_globals import extract_all_globals
-from extract_types import refresh_type_definitions
-from image_generator import generate_function_graphs
-from md_generator import generate_function_md, generate_appendix_md
-from module_analysis import (
-    refresh_functions
-)
+from parsers import get_parser
+from generators import get_generator
+from generators.images import generate_function_graphs
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +22,6 @@ def colorize_extract_phase_message(message, color):
 
 
 def build_analysis_paths(cache_dir, project_root):
-    # If project_root is a file, use its parent directory for naming
     if os.path.isfile(project_root):
         folder_name = os.path.basename(os.path.dirname(os.path.normpath(project_root)))
     else:
@@ -38,16 +33,19 @@ def build_analysis_paths(cache_dir, project_root):
     }
 
 
-def extract_global_variables(root_dir, output_json_path):
-    # no ai involved, full run each time
-    global_variables = extract_all_globals(root_dir)
-    with open(output_json_path, 'w', encoding='utf-8') as f:
+def extract_global_variables(root_dir, output_json_path, language="c"):
+    parser = get_parser(language)
+    global_variables = parser.extract_globals(root_dir)
+    with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump({"globals": global_variables}, f, indent=2, ensure_ascii=False)
     logger.info("Found %s global variables", len(global_variables))
     return output_json_path
 
 
 def run_extract_phase(args):
+    language = getattr(args, "language", "c")
+    parser = get_parser(language)
+
     logger.info(colorize_extract_phase_message("Scanning begins...", EXTRACT_PHASE_START_COLOR))
     os.makedirs(args.cache_dir, exist_ok=True)
     enable_ai = getattr(args, "ai", "on") == "on"
@@ -55,16 +53,17 @@ def run_extract_phase(args):
     project_root = os.path.normpath(args.root_dir)
     analysis_paths = build_analysis_paths(args.cache_dir, project_root)
 
-    global_vars_json_file = extract_global_variables(project_root, analysis_paths["globals"])
-    global_types_json_file = refresh_type_definitions(
+    extract_global_variables(project_root, analysis_paths["globals"], language)
+
+    global_types_json_file = parser.extract_types(
         project_root,
         args.cache_dir,
         enable_ai=enable_ai,
     )
-    refresh_functions(
+    parser.extract_functions(
         project_dir=project_root,
         types_json_path=global_types_json_file,
-        globals_json_path=global_vars_json_file,
+        globals_json_path=analysis_paths["globals"],
         output_json_path=analysis_paths["functions"],
         enable_ai=enable_ai,
     )
@@ -73,11 +72,17 @@ def run_extract_phase(args):
 
 
 def run_docgen_phase(args):
+    output_format = getattr(args, "format", "markdown")
+    generator = get_generator(output_format)
+
     logger.info(colorize_extract_phase_message("Generating docs...", EXTRACT_PHASE_START_COLOR))
-    
+
     cache_dir = args.cache_dir
     root_dir = args.root_dir
-    analyse_dir = args.analyse_dir
+    if hasattr(args, "analyse_dirs"):
+        analyse_dirs = args.analyse_dirs
+    else:
+        analyse_dirs = [getattr(args, "analyse_dir", root_dir)]
     output_folder = args.output_folder
 
     normalized_project_dir = os.path.normpath(root_dir)
@@ -85,12 +90,11 @@ def run_docgen_phase(args):
     types_json = analysis_paths["types"]
     functions_json = analysis_paths["functions"]
 
-    # Handle missing cache files (can happen when single file is passed)
     if not os.path.exists(types_json):
         logger.warning("Types cache file not found: %s", types_json)
         types_data = {"type_definitions": {}, "type_references": {}}
     else:
-        with open(types_json, 'r', encoding='utf-8') as f:
+        with open(types_json, "r", encoding="utf-8") as f:
             types_data = json.load(f)
     type_refs = types_data.get("type_references", {})
 
@@ -98,29 +102,30 @@ def run_docgen_phase(args):
         logger.warning("Functions cache file not found: %s", functions_json)
         all_functions = []
     else:
-        with open(functions_json, 'r', encoding='utf-8') as f:
+        with open(functions_json, "r", encoding="utf-8") as f:
             all_functions = json.load(f).get("functions", [])
 
-
-    # filter functions based on analyse_dir
-    normalized_analysis_dir = os.path.normpath(analyse_dir)
+    normalized_dirs = [os.path.normpath(d) for d in analyse_dirs]
     selected_funcs = []
+    seen = set()
     for func in all_functions:
         func_file = os.path.normpath(func["file"])
-        if func_file.startswith(normalized_analysis_dir):
-            selected_funcs.append(func)
+        for nd in normalized_dirs:
+            if func_file.startswith(nd):
+                if func["name"] not in seen:
+                    selected_funcs.append(func)
+                    seen.add(func["name"])
+                break
 
     if not selected_funcs:
-        logger.warning("No functions found under %s", analyse_dir)
+        logger.warning("No functions found under %s", analyse_dirs)
         return
 
-
-    # do painting
     used_type_names = set()
     for func in selected_funcs:
         for inp in func.get("inputs", []):
             if inp.get("kind") == "Global variable":
-                base_type = inp["type"].split(' ')[-1]
+                base_type = inp["type"].split(" ")[-1]
                 used_type_names.add(base_type)
             param_type = inp.get("type", "")
             for word in param_type.split():
@@ -129,17 +134,16 @@ def run_docgen_phase(args):
 
     figures_dir = os.path.join(output_folder, "figures")
     generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir)
-    
-    generate_function_md(
+
+    generator.generate_functions(
         functions_json=None,
         function_list=selected_funcs,
         types_json=types_json,
         figures_dir=figures_dir,
-        output_dir=output_folder
+        output_dir=output_folder,
     )
 
     appendix_output = os.path.join(output_folder, "appendix.md")
-    generate_appendix_md(types_json, appendix_output, filter_types=None)
+    generator.generate_appendix(types_json, appendix_output, filter_types=None)
 
     logger.info(colorize_extract_phase_message("It's done.", EXTRACT_PHASE_DONE_COLOR))
-

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aoto-md"
 version = "0.1.0"
-description = "C/C++ analysis CLI that generates graphs and markdown docs"
+description = "Multi-language code analysis CLI that generates graphs and documentation"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -22,16 +22,6 @@ aoto-md = "cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = [
-  "cli",
-  "ai_utils",
-  "compare",
-  "config_manager",
-  "extract_globals",
-  "extract_types",
-  "image_generator",
-  "md_generator",
-  "module_analysis",
-  "pipeline",
-  "utils",
-]
+py-modules = ["cli", "pipeline"]
+[tool.setuptools.packages.find]
+where = ["src"]
