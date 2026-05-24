@@ -48,13 +48,13 @@ def estimate_text_units(text):
     return weighted_length
 
 
-def get_box_width(text, char_width=0.11, min_width=3.0, padding=0.95, fontsize=11):
+def get_box_width(text, char_width=0.12, min_width=2.0, padding=0.0, fontsize=11):
     scale = fontsize / 11.0
-    return max(min_width * scale, estimate_text_units(text) * char_width * scale + padding * scale)
+    return max(min_width * scale, estimate_text_units(text) * char_width * scale)
 
 
 def get_box_height(fontsize):
-    return fontsize * 0.072
+    return fontsize * 0.024
 
 
 def draw_card(ax, x, y, width, height, text, fill, edge, text_color, fontsize=11):
@@ -158,8 +158,8 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
 
     CENTER_FS = 16
     SIDE_FS = 13
-    gap = 2.5
-    y_step = 1.2
+    gap = 0.6
+    y_step = 0.42
 
     for idx, total, func in iter_progress(functions, "Generating graphs"):
         fname = func.get("name", "unknown")
@@ -173,7 +173,7 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         side_height = get_box_height(SIDE_FS)
 
         box_widths = {}
-        box_widths[fname] = get_box_width(fname_display, min_width=4.2, padding=1.3, fontsize=CENTER_FS)
+        box_widths[fname] = get_box_width(fname_display, min_width=2.8, padding=0.0, fontsize=CENTER_FS)
         for c in callers:
             box_widths[c] = get_box_width(_truncated(c), fontsize=SIDE_FS)
         for c in callees:

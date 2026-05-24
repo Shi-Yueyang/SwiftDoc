@@ -77,7 +77,7 @@ class TestRunExtractPhase:
         cache_dir = str(tmp_path / "extract_cache")
         import argparse
 
-        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="oo")
+        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="oo", language="c")
         run_extract_phase(args)
         assert os.path.isdir(cache_dir)
 
@@ -85,7 +85,7 @@ class TestRunExtractPhase:
         cache_dir = str(tmp_path / "extract_cache2")
         import argparse
 
-        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="oo")
+        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="oo", language="c")
         run_extract_phase(args)
         folder = os.path.basename(os.path.normpath(sample_c_project))
         assert os.path.exists(os.path.join(cache_dir, f"{folder}_global_variables.json"))

@@ -11,7 +11,7 @@ import argparse
 import logging
 import tempfile
 import copy
-from core.utils import decode_file, highlight_message
+from core.utils import decode_file, highlight_message, collect_source_files
 from core.compare import compare_types
 from core.ai import ai_prompt_for_type, call_ai_from_config, AI_FAILED
 
@@ -42,19 +42,7 @@ def load_previous_type_cache(cache_path):
 
 
 def scan_project_types(project_dir):
-    h_files = []
-    
-    # If project_dir is a file, only process that file
-    if os.path.isfile(project_dir):
-        if project_dir.endswith(".h"):
-            h_files.append(project_dir)
-    else:
-        # Otherwise walk the directory
-        for root, dirs, files in os.walk(project_dir):
-            for f in files:
-                if f.endswith(".h"):
-                    h_files.append(os.path.join(root, f))
-
+    h_files = collect_source_files(project_dir, (".h",))
     all_types = {}
     for hf in h_files:
         with open(hf, "rb") as f:

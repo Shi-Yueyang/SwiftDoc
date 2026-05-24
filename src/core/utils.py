@@ -1,9 +1,12 @@
-import sys
 import os
+import sys
 import platform
+import logging
 from pathlib import Path
 
 import chardet
+
+logger = logging.getLogger(__name__)
 
 
 def enable_ansi_support():
@@ -92,3 +95,29 @@ def iter_progress(items, label, width=24):
     if show_progress:
         sys.stderr.write("\n")
         sys.stderr.flush()
+
+
+def collect_source_files(project_dir, extensions):
+    """Walk project_dir (or handle a single file) and return files matching any of the given extensions.
+
+    Args:
+        project_dir: Root directory path, or a single file path.
+        extensions: Tuple of extensions to match (e.g. ('.c', '.h')).
+
+    Returns:
+        List of absolute file paths sorted by name.
+    """
+    files = []
+    if os.path.isfile(project_dir):
+        if any(project_dir.endswith(ext) for ext in extensions):
+            files.append(project_dir)
+    else:
+        for root, _, filenames in os.walk(project_dir):
+            for f in filenames:
+                if any(f.endswith(ext) for ext in extensions):
+                    files.append(os.path.join(root, f))
+    files.sort()
+    if files and not os.path.isfile(project_dir):
+        ext_list = ", ".join(extensions)
+        logger.info("Found %s files (%s)", len(files), ext_list)
+    return files

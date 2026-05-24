@@ -19,7 +19,7 @@ import copy
 import chardet
 import tree_sitter_c
 from tree_sitter import Language, Parser
-from core.utils import get_node_text, find_identifier, highlight_message
+from core.utils import get_node_text, find_identifier, highlight_message, collect_source_files
 from core.ai import ai_prompt_for_function, call_ai_from_config, AI_FAILED
 from core.compare import compare_functions
 
@@ -416,19 +416,7 @@ def refresh_functions(
         globals_data = json.load(f)
         global_lookup = build_global_lookup(globals_data.get("globals", []))
 
-    c_files = []
-    
-    # If project_dir is a file, only process that file
-    if os.path.isfile(project_dir):
-        if project_dir.endswith(".c"):
-            c_files.append(project_dir)
-    else:
-        # Otherwise walk the directory
-        for root, _, files in os.walk(project_dir):
-            for f in files:
-                if f.endswith(".c"):
-                    c_files.append(os.path.join(root, f))
-
+    c_files = collect_source_files(project_dir, (".c",))
     if not c_files:
         logger.debug("No .c files found in %s", project_dir)
         return

@@ -8,7 +8,6 @@ import pytest
 from cli import (
     configure_logging,
     validate_paths,
-    validate_write_cache_files,
     build_parser,
     main,
 )
@@ -76,46 +75,14 @@ class TestValidatePaths:
             validate_paths(tmp_dir, ["Z:\\nonexistent"])
 
 
-class TestValidateWriteCacheFiles:
-    def test_existing_cache_files_pass(self, tmp_dir):
-        cache = os.path.join(tmp_dir, "cache")
-        os.makedirs(cache)
-        types_path = os.path.join(cache, f"{os.path.basename(tmp_dir)}_global_types.json")
-        funcs_path = os.path.join(cache, f"{os.path.basename(tmp_dir)}_functions.json")
-        for p in [types_path, funcs_path]:
-            with open(p, "w") as f:
-                f.write("{}")
-        validate_write_cache_files(tmp_dir, cache)
-
-    def test_missing_cache_files_raises(self, tmp_dir):
-        cache = os.path.join(tmp_dir, "missing_cache")
-        os.makedirs(cache, exist_ok=True)
-        with pytest.raises(ValueError, match="requires existing cache files"):
-            validate_write_cache_files(tmp_dir, cache)
-
-    def test_partial_missing_cache_files_raises(self, tmp_dir):
-        cache = os.path.join(tmp_dir, "partial_cache")
-        os.makedirs(cache)
-        types_path = os.path.join(cache, f"{os.path.basename(tmp_dir)}_global_types.json")
-        with open(types_path, "w") as f:
-            f.write("{}")
-        with pytest.raises(ValueError, match="requires existing cache files"):
-            validate_write_cache_files(tmp_dir, cache)
-
-
 class TestBuildParser:
     def test_parser_has_generate_subcommand(self):
         p = build_parser("/tmp/cache")
         p.print_help()
         # generate should be a valid subcommand
-        ns = p.parse_args(["generate", "/some/project"])
+        ns = p.parse_args(["generate", "c", "/some/project"])
         assert ns.command == "generate"
         assert ns.root_dir == "/some/project"
-
-    def test_parser_has_write_subcommand(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["write", "/some/project"])
-        assert ns.command == "write"
 
     def test_parser_has_config_subcommand(self):
         p = build_parser("/tmp/cache")
@@ -132,7 +99,7 @@ class TestBuildParser:
 
     def test_generate_defaults(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj"])
+        ns = p.parse_args(["generate", "c", "/proj"])
         assert ns.ai == "oo"
         assert ns.cache_dir == "/tmp/cache"
         assert ns.output_folder == "out"
@@ -140,17 +107,17 @@ class TestBuildParser:
 
     def test_generate_with_ai_on(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj", "--ai", "on"])
+        ns = p.parse_args(["generate", "c", "/proj", "--ai", "on"])
         assert ns.ai == "on"
 
     def test_generate_with_multiple_analyse_dirs(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])
+        ns = p.parse_args(["generate", "c", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])
         assert ns.analyse_dir == ["/proj/a", "/proj/b"]
 
     def test_verbose_flag(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["--verbose", "generate", "/proj"])
+        ns = p.parse_args(["--verbose", "generate", "c", "/proj"])
         assert ns.verbose is True
 
 
@@ -187,19 +154,9 @@ class TestMain:
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
         monkeypatch.setattr(
             "sys.argv",
-            ["cli.py", "generate", str(tmp_path), "--analyse_dir", "/nonexistent/path"],
+            ["cli.py", "generate", "c", str(tmp_path), "--analyse_dir", "/nonexistent/path"],
         )
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code != 0
 
-    def test_write_missing_cache_files(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        cache_dir = os.path.join(str(tmp_path), "nocache")
-        monkeypatch.setattr(
-            "sys.argv",
-            ["cli.py", "write", str(tmp_path), "--cache_dir", cache_dir],
-        )
-        with pytest.raises(SystemExit) as exc:
-            main()
-        assert exc.value.code != 0

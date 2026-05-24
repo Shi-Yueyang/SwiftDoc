@@ -42,7 +42,7 @@ class TestEstimateTextUnits:
 class TestGetBoxWidth:
     def test_minimum_width(self):
         width = get_box_width("x")
-        assert width >= 3.0
+        assert width >= 2.0
 
     def test_longer_text_wider(self):
         short = get_box_width("a")

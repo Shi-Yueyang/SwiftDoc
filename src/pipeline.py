@@ -43,8 +43,7 @@ def extract_global_variables(root_dir, output_json_path, language="c"):
 
 
 def run_extract_phase(args):
-    language = getattr(args, "language", "c")
-    parser = get_parser(language)
+    parser = get_parser(args.language)
 
     logger.info(colorize_extract_phase_message("Scanning begins...", EXTRACT_PHASE_START_COLOR))
     os.makedirs(args.cache_dir, exist_ok=True)
@@ -53,13 +52,21 @@ def run_extract_phase(args):
     project_root = os.path.normpath(args.root_dir)
     analysis_paths = build_analysis_paths(args.cache_dir, project_root)
 
-    extract_global_variables(project_root, analysis_paths["globals"], language)
+    if parser.supports_globals:
+        extract_global_variables(project_root, analysis_paths["globals"], args.language)
+    else:
+        # Write an empty globals file so downstream steps don't break
+        with open(analysis_paths["globals"], "w", encoding="utf-8") as f:
+            json.dump({"globals": []}, f)
 
-    global_types_json_file = parser.extract_types(
-        project_root,
-        args.cache_dir,
-        enable_ai=enable_ai,
-    )
+    if parser.supports_types:
+        global_types_json_file = parser.extract_types(
+            project_root, args.cache_dir, enable_ai=enable_ai,
+        )
+    else:
+        global_types_json_file = ""
+        logger.info("Skipping type extraction (not supported for %s)", args.language)
+
     parser.extract_functions(
         project_dir=project_root,
         types_json_path=global_types_json_file,

@@ -1,28 +1,32 @@
-"""
-Parser registry for auto-md.
+"""Parser registry for auto-md.
 
-Add new languages by creating a package (e.g., parsers/rust/) and registering it here.
-A parser package must export three functions:
+Add new languages by subclassing parsers.base.BaseParser and registering here.
+Each parser instance provides:
+    language: str
+    source_extensions: tuple
+    header_extensions: tuple
+    supports_types: bool
+    supports_globals: bool
     extract_globals(project_dir) -> list[dict]
     extract_types(project_dir, cache_dir, enable_ai) -> str
     extract_functions(project_dir, types_json, globals_json, output_json, enable_ai) -> str
 """
 
-import importlib
+from parsers.c import CParser
 
 _PARSERS = {
-    "c": "parsers.c",
+    "c": CParser(),
 }
 
 
 def get_parser(language="c"):
-    """Return the parser module for the given language."""
+    """Return a parser instance for the given language."""
     language = language.lower()
     if language not in _PARSERS:
         raise ValueError(f"Unsupported language: {language}. Available: {list(_PARSERS.keys())}")
-    return importlib.import_module(_PARSERS[language])
+    return _PARSERS[language]
 
 
-def register_parser(language, module_path):
-    """Register a new parser module for a language."""
-    _PARSERS[language.lower()] = module_path
+def register_parser(language, parser_instance):
+    """Register a parser instance for a language."""
+    _PARSERS[language.lower()] = parser_instance

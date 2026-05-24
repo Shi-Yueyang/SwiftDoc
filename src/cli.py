@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 from config.manager import ensure_ai_config_interactive, rerun_ai_config_interactive, set_config_value
-from pipeline import build_analysis_paths, run_extract_phase, run_docgen_phase
+from pipeline import run_extract_phase, run_docgen_phase
 from core.utils import get_default_cache_dir
 
 
@@ -35,28 +35,13 @@ def validate_paths(root_dir, analyse_dirs):
             raise ValueError(f"analyse_dir must be inside root_dir: {analyse_dir}")
 
 
-def validate_write_cache_files(root_dir, cache_dir):
-    analysis_paths = build_analysis_paths(cache_dir, root_dir)
-    required_paths = [analysis_paths["types"], analysis_paths["functions"]]
-    missing_paths = [path for path in required_paths if not os.path.exists(path)]
-    if missing_paths:
-        missing_text = ", ".join(missing_paths)
-        raise ValueError(
-            "write requires existing cache files: "
-            f"{missing_text}. Run generate first."
-        )
-
-
 def build_parser(default_cache_dir):
     examples = """Examples:
   Generate documentation:
-    python -m cli generate examples/c
-    python -m cli generate examples/c --ai off
-    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
-
-  Write from existing cache:
-    python -m cli write examples/c --cache_dir .analysis --output_folder out_docs
+    python -m cli generate c examples/c
+    python -m cli generate c examples/c --ai off
+    python -m cli generate c examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    python -m cli generate c examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
 
   Configure AI:
     python -m cli config
@@ -78,10 +63,10 @@ def build_parser(default_cache_dir):
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     generate_examples = """Examples:
-    python -m cli generate examples/c
-    python -m cli generate examples/c --ai off
-    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
+    python -m cli generate c examples/c
+    python -m cli generate c examples/c --ai off
+    python -m cli generate c examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    python -m cli generate c examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
 """
 
     generate_parser = subparsers.add_parser(
@@ -89,6 +74,10 @@ def build_parser(default_cache_dir):
         help="Extract project data and generate markdown documentation",
         epilog=generate_examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    generate_parser.add_argument(
+        "lang",
+        help="Source language for parsing (e.g. c)",
     )
     generate_parser.add_argument(
         "root_dir",
@@ -117,53 +106,6 @@ def build_parser(default_cache_dir):
         help="Enable AI for type/function analysis and interactive onboarding when config is missing",
     )
     generate_parser.add_argument(
-        "--lang",
-        default="c",
-        help="Source language for parsing (default: c)",
-    )
-    generate_parser.add_argument(
-        "--format",
-        default="markdown",
-        help="Output documentation format (default: markdown)",
-    )
-
-    write_examples = """Examples:
-    python -m cli write examples/c --analyse_dir examples/c/bsw --cache_dir .analysis --output_folder out
-    python -m cli write examples/c --cache_dir .analysis --output_folder out
-    """
-
-    write_parser = subparsers.add_parser(
-        "write",
-        help="Generate markdown documentation from existing cached analysis only",
-        epilog=write_examples,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    write_parser.add_argument(
-        "root_dir",
-        help="Project root directory used to resolve cached analysis files",
-    )
-    write_parser.add_argument(
-        "--analyse_dir",
-        action="append",
-        default=None,
-        help="Subset of root_dir to generate docs for (repeatable, defaults to root_dir)",
-    )
-    write_parser.add_argument(
-        "--cache_dir",
-        default=default_cache_dir,
-        help="Cache directory for intermediate JSON files",
-    )
-    write_parser.add_argument(
-        "--output_folder",
-        default="out",
-        help="Output directory for markdown and figures",
-    )
-    write_parser.add_argument(
-        "--lang",
-        default="c",
-        help="Source language that produced the cached analysis (default: c)",
-    )
-    write_parser.add_argument(
         "--format",
         default="markdown",
         help="Output documentation format (default: markdown)",
@@ -232,16 +174,11 @@ def main():
             root_dir=cli_args.root_dir,
             cache_dir=cli_args.cache_dir,
             ai=cli_args.ai,
-            language=getattr(cli_args, "lang", "c"),
+            language=cli_args.lang,
         )
         run_extract_phase(extract_args)
-    elif cli_args.command == "write":
-        try:
-            validate_write_cache_files(cli_args.root_dir, cli_args.cache_dir)
-        except ValueError as exc:
-            parser.error(str(exc))
 
-    # 2. Document generation phase
+    # Document generation phase
     docgen_args = argparse.Namespace(
         root_dir=cli_args.root_dir,
         analyse_dirs=analyse_dirs,

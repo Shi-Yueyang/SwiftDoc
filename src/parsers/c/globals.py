@@ -10,7 +10,7 @@ import logging
 import chardet
 import tree_sitter_c
 from tree_sitter import Language, Parser
-from core.utils import get_node_text, find_identifier
+from core.utils import get_node_text, find_identifier, collect_source_files
 
 
 logger = logging.getLogger(__name__)
@@ -134,26 +134,8 @@ def get_global_key(global_info):
 
 
 def extract_all_globals(project_dir):
-    c_files = []
-    h_files = []
-    
-    # If project_dir is a file, only process that file
-    if os.path.isfile(project_dir):
-        if project_dir.endswith('.c'):
-            c_files.append(project_dir)
-        elif project_dir.endswith('.h'):
-            h_files.append(project_dir)
-    else:
-        # Otherwise walk the directory
-        for root, _, files in os.walk(project_dir):
-            for f in files:
-                full = os.path.join(root, f)
-                if f.endswith('.c'):
-                    c_files.append(full)
-                elif f.endswith('.h'):
-                    h_files.append(full)
-
-    logger.info("Found %s .c files, %s .h files", len(c_files), len(h_files))
+    c_files = collect_source_files(project_dir, (".c",))
+    h_files = collect_source_files(project_dir, (".h",))
     all_globals = {}
 
     for cf in c_files:

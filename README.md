@@ -10,7 +10,7 @@ python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate 
 pip install -e .
 
 # Run on the built-in C example (no AI needed)
-python -m cli generate examples/c --ai off
+python -m cli generate c examples/c --ai off
 
 # Open the generated docs
 #   out/          — markdown files per function
@@ -24,34 +24,28 @@ python -m cli generate examples/c --ai off
 
 ```bash
 # Entire project
-python -m cli generate examples/c --ai off
+python -m cli generate c examples/c --ai off
 
 # Specific subdirectories or files
-python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+python -m cli generate c examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
 
 # Single file
-python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --ai off
+python -m cli generate c examples/c --analyse_dir examples/c/comm/sensor.c --ai off
 
 # With custom cache/output paths
-python -m cli generate examples/c --cache_dir .analysis --output_folder out_docs --ai on
+python -m cli generate c examples/c --cache_dir .analysis --output_folder out_docs --ai on
 ```
 
-| Flag | Default | Description |
+| Argument | Default | Description |
 |---|---|---|
+| `lang` | *(required)* | Source language (e.g. `c`) |
 | `root_dir` | *(required)* | Project root for the extract phase |
 | `--analyse_dir` | root_dir | Subset to generate docs for (repeatable) |
 | `--cache_dir` | platform cache | Intermediate JSON directory |
 | `--output_folder` | `out` | Output directory for docs and figures |
 | `--ai` | `oo` | `on` / `off` for AI-generated descriptions |
-| `--lang` | `c` | Source language |
 | `--format` | `markdown` | Output documentation format |
 | `--verbose` | off | Enable debug logging |
-
-### `write` — docs from existing cache only
-
-```bash
-python -m cli write examples/c --analyse_dir examples/c/bsw --cache_dir .analysis --output_folder out
-```
 
 ### `config` — manage AI settings
 
@@ -85,10 +79,13 @@ src/
 ├── cli.py                     # entry point
 ├── pipeline.py                # orchestrator
 ├── config/manager.py          # AI settings
-├── core/                      # shared utils, AI, diff
-├── parsers/c/                 # C language parser
-├── generators/markdown/       # markdown doc generator
-└── generators/images.py       # call-graph generator
+├── core/                      # shared utils, AI, compare
+├── parsers/
+│   ├── base.py                # BaseParser ABC — subclass to add a language
+│   └── c/                     # C language parser
+├── generators/
+│   ├── markdown/              # markdown doc generator
+│   └── images.py              # call-graph generator
 
 examples/
 └── c/                         # sample C project for testing
