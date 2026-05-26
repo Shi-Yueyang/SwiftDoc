@@ -38,10 +38,11 @@ def validate_paths(root_dir, analyse_dirs):
 def build_parser(default_cache_dir):
     examples = """Examples:
   Generate documentation:
-    python -m cli generate c examples/c
-    python -m cli generate c examples/c --ai off
-    python -m cli generate c examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    python -m cli generate c examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
+    python -m cli generate examples/c
+    python -m cli generate examples/c --lang c
+    python -m cli generate examples/c --ai off
+    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
 
   Configure AI:
     python -m cli config
@@ -50,7 +51,7 @@ def build_parser(default_cache_dir):
     python -m cli config retry_count 3
 """
     parser = argparse.ArgumentParser(
-        description="Analyze C project, generate markdown docs, and manage AI configuration",
+        description="Analyze source code, generate documentation, and manage AI configuration",
         epilog=examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -63,10 +64,12 @@ def build_parser(default_cache_dir):
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     generate_examples = """Examples:
-    python -m cli generate c examples/c
-    python -m cli generate c examples/c --ai off
-    python -m cli generate c examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    python -m cli generate c examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
+    python -m cli generate examples/c
+    python -m cli generate examples/c --lang c
+    python -m cli generate examples/c --ai off
+    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
+    python -m cli generate examples/c --group-by file --format markdown
 """
 
     generate_parser = subparsers.add_parser(
@@ -76,8 +79,9 @@ def build_parser(default_cache_dir):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     generate_parser.add_argument(
-        "lang",
-        help="Source language for parsing (e.g. c)",
+        "--lang",
+        default="c",
+        help="Source language for parsing (default: c)",
     )
     generate_parser.add_argument(
         "root_dir",
@@ -107,6 +111,7 @@ def build_parser(default_cache_dir):
     )
     generate_parser.add_argument(
         "--format",
+        choices=["markdown", "docx"],
         default="markdown",
         help="Output documentation format (default: markdown)",
     )

@@ -28,7 +28,7 @@ CALLER_LINE = "#e11d48"
 CALLEE_FILL = "#eff6ff"
 CALLEE_EDGE = "#60a5fa"
 CALLEE_LINE = "#2563eb"
-LABEL_COLOR = "#64748b"
+
 CARD_SHADOW = (0, -3)
 
 MAX_NAME_LEN = 34
@@ -114,19 +114,6 @@ def draw_connector(ax, start, end, color):
     ax.add_patch(arrow)
 
 
-def draw_section_label(ax, x, y, text):
-    ax.text(
-        x,
-        y,
-        text,
-        ha="center",
-        va="center",
-        fontsize=10,
-        color=LABEL_COLOR,
-        fontweight="bold",
-        zorder=5,
-    )
-
 
 def _truncated(text):
     if len(text) > MAX_NAME_LEN:
@@ -207,15 +194,15 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
             horizontal_edges.append(x - box_widths[node_name] / 2)
             horizontal_edges.append(x + box_widths[node_name] / 2)
         y_values = [y for _, y in pos.values()] or [0]
-        min_x = min(horizontal_edges) - 1.6
-        max_x = max(horizontal_edges) + 1.6
-        min_y = min(y_values) - 1.8
-        max_y = max(y_values) + 2.0
+        min_x = min(horizontal_edges) - 0.6
+        max_x = max(horizontal_edges) + 0.6
+        min_y = min(y_values) - 0.5
+        max_y = max(y_values) + 0.5
 
         panel = FancyBboxPatch(
-            (min_x + 0.2, min_y + 0.2),
-            max_x - min_x - 0.4,
-            max_y - min_y - 0.4,
+            (min_x + 0.15, min_y + 0.15),
+            max_x - min_x - 0.3,
+            max_y - min_y - 0.3,
             boxstyle="round,pad=0.02,rounding_size=0.25",
             linewidth=0,
             facecolor=PANEL_COLOR,
@@ -232,12 +219,6 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         )
 
         if callers:
-            draw_section_label(
-                ax,
-                min(pos[c][0] for c in callers),
-                max_y - 0.65,
-                "CALLERS",
-            )
             for c in callers:
                 x0, y0 = pos[c]
                 draw_card(
@@ -254,12 +235,6 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
                 )
 
         if callees:
-            draw_section_label(
-                ax,
-                max(pos[c][0] for c in callees),
-                max_y - 0.65,
-                "CALLS",
-            )
             for c in callees:
                 x1, y1 = pos[c]
                 draw_card(
