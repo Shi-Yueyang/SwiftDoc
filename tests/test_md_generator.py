@@ -2,17 +2,17 @@ import os
 import json
 import pytest
 
-from generators.markdown.functions import (
+from generators.common import (
     normalize_function_for_doc,
+    remove_c_comments,
+    generate_definition,
+)
+from generators.markdown.functions import (
     generate_function_md,
     generate_function_md_by_file,
     _write_function_section,
 )
-from generators.markdown.appendix import (
-    generate_appendix_md,
-    remove_c_comments,
-    generate_definition,
-)
+from generators.markdown.appendix import generate_appendix_md
 
 
 class TestNormalizeFunctionForDoc:

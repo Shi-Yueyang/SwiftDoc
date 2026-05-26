@@ -1,0 +1,2 @@
+from generators.docx.functions import generate_function_docx as generate_functions
+from generators.docx.appendix import generate_appendix_docx as generate_appendix

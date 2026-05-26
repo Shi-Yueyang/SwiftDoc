@@ -1,0 +1,271 @@
+import os
+import json
+import logging
+from collections import defaultdict
+
+from docx import Document
+from docx.shared import Inches, Pt, Cm, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+from core.utils import iter_progress
+from generators.common import normalize_function_for_doc, load_types, build_type_desc_map
+
+logger = logging.getLogger(__name__)
+
+HEADER_SHADING = "D9E2F3"
+
+
+def _create_document():
+    doc = Document()
+
+    section = doc.sections[0]
+    section.top_margin = Cm(2.54)
+    section.bottom_margin = Cm(2.54)
+    section.left_margin = Cm(3.17)
+    section.right_margin = Cm(3.17)
+
+    style = doc.styles["Normal"]
+    font = style.font
+    font.name = "Calibri"
+    font.size = Pt(10.5)
+    style.element.rPr.rFonts.set(qn("w:eastAsia"), "Microsoft YaHei")
+
+    for level, size in [(1, 16), (2, 13), (3, 11)]:
+        heading_style = doc.styles[f"Heading {level}"]
+        heading_style.font.size = Pt(size)
+        heading_style.font.bold = True
+        heading_style.font.name = "Calibri"
+        heading_style.element.rPr.rFonts.set(qn("w:eastAsia"), "Microsoft YaHei")
+
+    return doc
+
+
+def _set_cell_shading(cell, color):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    shading = OxmlElement("w:shd")
+    shading.set(qn("w:fill"), color)
+    shading.set(qn("w:val"), "clear")
+    tcPr.append(shading)
+
+
+def _set_cell_text(cell, text, bold=False):
+    cell.text = ""
+    p = cell.paragraphs[0]
+    run = p.add_run(str(text) if text is not None else "")
+    run.font.size = Pt(9)
+    run.font.name = "Calibri"
+    run.bold = bold
+
+
+def _style_header_row(table, headers):
+    for i, header in enumerate(headers):
+        cell = table.rows[0].cells[i]
+        _set_cell_text(cell, header, bold=True)
+        _set_cell_shading(cell, HEADER_SHADING)
+
+
+def _add_input_table(doc, inputs, heading_level):
+    doc.add_heading("输入项", level=heading_level)
+    table = doc.add_table(rows=1, cols=5)
+    table.style = "Table Grid"
+    _style_header_row(table, [
+        "标识符ID", "类型Type", "输入方式Input mode",
+        "数据方向Direction of data", "描述Description",
+    ])
+
+    if inputs:
+        for inp in inputs:
+            row = table.add_row()
+            _set_cell_text(row.cells[0], inp.get("name", "N/A"))
+            _set_cell_text(row.cells[1], inp.get("type", "N/A"))
+            mode = "Parameter" if inp.get("kind") == "parameter" else "Global variable"
+            _set_cell_text(row.cells[2], mode)
+            _set_cell_text(row.cells[3], inp.get("direction", "in"))
+            _set_cell_text(row.cells[4], inp.get("inputs_description") or "N/A")
+    else:
+        row = table.add_row()
+        for cell in row.cells:
+            _set_cell_text(cell, "N/A")
+
+    doc.add_paragraph()
+
+
+def _add_output_table(doc, returns, heading_level):
+    doc.add_heading("输出项", level=heading_level)
+    table = doc.add_table(rows=1, cols=4)
+    table.style = "Table Grid"
+    _style_header_row(table, [
+        "标识符ID", "类型Type", "输出方式Output mode", "描述Description",
+    ])
+
+    if returns and isinstance(returns, list):
+        valid = [r for r in returns if r.get("expression") or r.get("return_description")]
+        if valid:
+            for ret in valid:
+                row = table.add_row()
+                _set_cell_text(row.cells[0], ret.get("expression", ""))
+                _set_cell_text(row.cells[1], "N/A")
+                _set_cell_text(row.cells[2], "Return")
+                _set_cell_text(row.cells[3], ret.get("return_description", "") or "N/A")
+        else:
+            row = table.add_row()
+            for cell in row.cells:
+                _set_cell_text(cell, "N/A")
+    else:
+        row = table.add_row()
+        for cell in row.cells:
+            _set_cell_text(cell, "N/A")
+
+    doc.add_paragraph()
+
+
+def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level):
+    global_types = {}
+    for inp in inputs:
+        if inp.get("kind") == "Global variable":
+            typ = inp.get("type", "")
+            ref = inp.get("type_ref", "")
+            if typ and ref and ref not in ("", "NA", "N/A"):
+                if typ not in global_types:
+                    global_types[typ] = ref
+
+    doc.add_heading("全局数据结构", level=heading_level)
+    table = doc.add_table(rows=1, cols=3)
+    table.style = "Table Grid"
+    _style_header_row(table, ["类型Type", "参考Ref", "描述Description"])
+
+    if global_types:
+        for typ, ref in global_types.items():
+            row = table.add_row()
+            _set_cell_text(row.cells[0], typ)
+            base_type = typ.split("[")[0].strip().rstrip("*").strip()
+            ref_code = type_refs.get(base_type, ref)
+            _set_cell_text(row.cells[1], ref_code)
+            desc = type_desc_map.get(base_type, "") or "N/A"
+            _set_cell_text(row.cells[2], desc)
+    else:
+        row = table.add_row()
+        for cell in row.cells:
+            _set_cell_text(cell, "N/A")
+
+    doc.add_paragraph()
+
+
+def _add_local_data_table(doc, heading_level):
+    doc.add_heading("局部数据结构", level=heading_level)
+    table = doc.add_table(rows=1, cols=3)
+    table.style = "Table Grid"
+    _style_header_row(table, ["类型Type", "参考Ref", "描述Description"])
+
+    row = table.add_row()
+    for cell in row.cells:
+        _set_cell_text(cell, "N/A")
+
+    doc.add_paragraph()
+
+
+def _add_algorithm_section(doc, algo, heading_level):
+    doc.add_heading("算法和逻辑", level=heading_level)
+    doc.add_paragraph(algo or "")
+    doc.add_paragraph()
+
+
+def _add_call_graph(doc, fname, figures_dir, heading_level):
+    doc.add_heading("接口", level=heading_level)
+    safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
+    img_path = os.path.join(figures_dir, f"{safe_name}.png")
+    if os.path.exists(img_path):
+        try:
+            doc.add_picture(img_path, width=Inches(5.5))
+            last_paragraph = doc.paragraphs[-1]
+            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        except Exception:
+            logger.debug("Failed to embed image: %s", img_path)
+    doc.add_paragraph()
+
+
+def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level):
+    fname = func.get("name", "unknown_func")
+    doc.add_heading(fname, level=heading_level)
+
+    p = doc.add_paragraph()
+    run = p.add_run(f"function：{fname}")
+    run.bold = True
+
+    _add_input_table(doc, func.get("inputs", []), heading_level + 1)
+    _add_output_table(doc, func.get("returns", []), heading_level + 1)
+    _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map, heading_level + 1)
+    _add_local_data_table(doc, heading_level + 1)
+    _add_algorithm_section(doc, func.get("algorithm_logic", ""), heading_level + 1)
+    _add_call_graph(doc, fname, figures_dir, heading_level + 1)
+
+
+def _sanitize_filename(name):
+    return name.replace("\\", "_").replace("/", "_").replace(":", "_")
+
+
+def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir):
+    type_defs, type_refs = load_types(types_json)
+    type_desc_map = build_type_desc_map(type_defs)
+    os.makedirs(output_dir, exist_ok=True)
+
+    for _, _, raw_func in iter_progress(function_list, "Generating docx"):
+        func = normalize_function_for_doc(raw_func)
+        fname = func.get("name", "unknown_func")
+        doc = _create_document()
+        _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=1)
+
+        safe_name = _sanitize_filename(fname)
+        doc.save(os.path.join(output_dir, f"{safe_name}.docx"))
+
+
+def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir):
+    type_defs, type_refs = load_types(types_json)
+    type_desc_map = build_type_desc_map(type_defs)
+    os.makedirs(output_dir, exist_ok=True)
+
+    grouped = defaultdict(list)
+    for func in function_list:
+        grouped[func.get("file", "unknown")].append(func)
+
+    items = list(grouped.items())
+    for _, _, (file_path, funcs) in iter_progress(items, "Generating docx"):
+        base = os.path.splitext(os.path.basename(file_path))[0]
+        doc = _create_document()
+
+        doc.add_heading(f"{base}.c", level=1)
+        doc.add_paragraph(f"Source file: {file_path}")
+        doc.add_paragraph(f"Functions: {len(funcs)}")
+
+        for raw_func in funcs:
+            func = normalize_function_for_doc(raw_func)
+            _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=2)
+            doc.add_page_break()
+
+        safe_base = _sanitize_filename(base)
+        doc.save(os.path.join(output_dir, f"{safe_base}.docx"))
+
+
+def generate_function_docx(functions_json=None, function_list=None, types_json=None,
+                           figures_dir=None, output_dir="DOCX", group_by="function"):
+    if function_list is not None:
+        functions = function_list
+    else:
+        if functions_json is None:
+            raise ValueError("Either functions_json or function_list must be provided")
+        with open(functions_json, "r", encoding="utf-8") as f:
+            func_data = json.load(f)
+        functions = func_data.get("functions", [])
+
+    if types_json is None:
+        raise ValueError("types_json must be provided")
+    if figures_dir is None:
+        raise ValueError("figures_dir must be provided")
+
+    if group_by == "file":
+        generate_function_docx_by_file(functions, types_json, figures_dir, output_dir)
+    else:
+        generate_function_docx_per_function(functions, types_json, figures_dir, output_dir)

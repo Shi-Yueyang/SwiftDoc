@@ -4,39 +4,10 @@ import logging
 from collections import defaultdict
 
 from core.utils import iter_progress
+from generators.common import normalize_function_for_doc, load_types, build_type_desc_map
 
 
 logger = logging.getLogger(__name__)
-
-
-def normalize_function_for_doc(func):
-    normalized = dict(func)
-    normalized.setdefault("algorithm_logic", "")
-
-    normalized_inputs = []
-    for inp in normalized.get("inputs", []):
-        if isinstance(inp, dict):
-            normalized_input = dict(inp)
-            normalized_input.setdefault("inputs_description", "")
-            normalized_inputs.append(normalized_input)
-    normalized["inputs"] = normalized_inputs
-
-    returns = normalized.get("returns", [])
-    if isinstance(returns, list) and returns and isinstance(returns[0], str):
-        normalized["returns"] = [
-            {"expression": expr, "return_description": ""} for expr in returns
-        ]
-    else:
-        normalized_returns = []
-        for ret in returns if isinstance(returns, list) else []:
-            if isinstance(ret, dict):
-                normalized_return = dict(ret)
-                normalized_return.setdefault("expression", "")
-                normalized_return.setdefault("return_description", "")
-                normalized_returns.append(normalized_return)
-        normalized["returns"] = normalized_returns
-
-    return normalized
 
 
 def _write_function_section(func, type_refs, type_desc_map, figures_dir):
@@ -126,29 +97,10 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir):
     return lines
 
 
-def _load_types(types_json):
-    if types_json and os.path.exists(types_json):
-        with open(types_json, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return (
-            data.get("type_definitions", {}),
-            data.get("type_references", {}),
-        )
-    return {}, {}
-
-
-def _build_type_desc_map(type_defs):
-    return {
-        tname: info.get("type_description", "")
-        for tname, info in type_defs.items()
-        if isinstance(info, dict) and info.get("type_description")
-    }
-
-
 def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir):
     """Generate one .md file per function."""
-    type_defs, type_refs = _load_types(types_json)
-    type_desc_map = _build_type_desc_map(type_defs)
+    type_defs, type_refs = load_types(types_json)
+    type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
 
     for _, _, raw_func in iter_progress(function_list, "Generating markdown"):
@@ -164,8 +116,8 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
 
 def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir):
     """Generate one .md file per source file, grouping functions together."""
-    type_defs, type_refs = _load_types(types_json)
-    type_desc_map = _build_type_desc_map(type_defs)
+    type_defs, type_refs = load_types(types_json)
+    type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
 
     grouped = defaultdict(list)

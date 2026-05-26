@@ -4,47 +4,10 @@ import json
 import logging
 from typing import Dict, Any, List, Tuple, Optional, Set
 
+from generators.common import remove_c_comments, generate_definition
+
 
 logger = logging.getLogger(__name__)
-
-
-def remove_c_comments(text: str) -> str:
-    """Remove both block /* ... */ and line // ... comments from text."""
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    text = re.sub(r'//.*?(?=\n|$)', '', text, flags=re.MULTILINE)
-    text = re.sub(r'[ \t]+', ' ', text)
-    text = re.sub(r'[ \t]*\n[ \t]*', '\n', text)
-    return text.strip()
-
-
-def generate_definition(type_name: str, info: Dict[str, Any]) -> str:
-    """Generate a C type definition string, replacing newlines with <br>."""
-    kind = info.get("kind", "unknown")
-    if kind == "struct":
-        members = info.get("members", [])
-        cleaned_members = [remove_c_comments(m) for m in members if remove_c_comments(m)]
-        members_str = "<br>    ".join(cleaned_members) if cleaned_members else "    /* no members */"
-        return f"typedef struct {{<br>    {members_str}<br>}} {type_name};"
-    elif kind == "union":
-        members = info.get("members", [])
-        cleaned_members = [remove_c_comments(m) for m in members if remove_c_comments(m)]
-        members_str = "<br>    ".join(cleaned_members) if cleaned_members else "    /* no members */"
-        return f"typedef union {{<br>    {members_str}<br>}} {type_name};"
-    elif kind == "enum":
-        values = info.get("values", [])
-        cleaned_values = [remove_c_comments(v).strip() for v in values if remove_c_comments(v).strip()]
-        if cleaned_values:
-            values_str = ",<br>    ".join(cleaned_values)
-            enum_body = f"<br>    {values_str}<br>"
-        else:
-            enum_body = "<br>    /* no values */<br>"
-        return f"typedef enum {{{enum_body}}} {type_name};"
-    elif kind == "typedef":
-        original = info.get("original_type", "")
-        original_clean = remove_c_comments(original)
-        return f"typedef {original_clean} {type_name};"
-    else:
-        return f"/* unknown kind: {kind} */ {type_name}"
 
 
 def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types: Optional[Set[str]] = None) -> None:
@@ -67,7 +30,7 @@ def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types
         if filter_types is not None and type_name not in filter_types:
             continue
         info = type_defs[type_name]
-        definition = generate_definition(type_name, info)
+        definition = generate_definition(type_name, info).replace("\n", "<br>")
         description = info.get("type_description", "").strip()
         if not description:
             description = "No description"

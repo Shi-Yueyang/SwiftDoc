@@ -4,7 +4,7 @@ import logging
 import sys
 
 from parsers import get_parser
-from generators import get_generator
+from generators import get_generator, get_format_extension
 from generators.images import generate_function_graphs
 
 
@@ -151,7 +151,8 @@ def run_docgen_phase(args):
         group_by=getattr(args, "group_by", "function"),
     )
 
-    appendix_output = os.path.join(output_folder, "appendix.md")
+    appendix_ext = get_format_extension(output_format)
+    appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
     generator.generate_appendix(types_json, appendix_output, filter_types=None)
 
     logger.info(colorize_extract_phase_message("It's done.", EXTRACT_PHASE_DONE_COLOR))

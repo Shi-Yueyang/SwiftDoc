@@ -11,6 +11,12 @@ import importlib
 
 _GENERATORS = {
     "markdown": "generators.markdown",
+    "docx": "generators.docx",
+}
+
+_FORMAT_EXTENSIONS = {
+    "markdown": ".md",
+    "docx": ".docx",
 }
 
 
@@ -25,3 +31,8 @@ def get_generator(format="markdown"):
 def register_generator(format, module_path):
     """Register a new generator module for an output format."""
     _GENERATORS[format.lower()] = module_path
+
+
+def get_format_extension(format):
+    """Return the file extension for a given output format."""
+    return _FORMAT_EXTENSIONS.get(format.lower(), f".{format.lower()}")
