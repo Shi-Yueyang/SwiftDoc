@@ -236,7 +236,7 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
         base = os.path.splitext(os.path.basename(file_path))[0]
         doc = _create_document()
 
-        doc.add_heading(f"{base}.c", level=1)
+        doc.add_heading(os.path.basename(file_path), level=1)
         doc.add_paragraph(f"Source file: {file_path}")
         doc.add_paragraph(f"Functions: {len(funcs)}")
 

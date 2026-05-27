@@ -5,6 +5,8 @@ import pytest
 from parsers.c.types import (
     collect_type_definitions_with_comments,
     scan_project_types,
+)
+from parsers.common import (
     load_previous_type_cache,
     write_types_cache,
     is_missing_type_description,

@@ -129,7 +129,8 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
         base = os.path.splitext(os.path.basename(file_path))[0]
         safe_base = base.replace("\\", "_").replace("/", "_").replace(":", "_")
 
-        lines = [f"# {base}.c", f"", f"**Source file: {file_path}**", "", f"Functions: {len(funcs)}", ""]
+        filename = os.path.basename(file_path)
+        lines = [f"# {filename}", f"", f"**Source file: {file_path}**", "", f"Functions: {len(funcs)}", ""]
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)

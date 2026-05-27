@@ -6,39 +6,18 @@ exclude commented-out types, associate the preceding comments, and output a JSON
 import os
 import re
 import json
-import time
-import argparse
 import logging
-import tempfile
-import copy
 from core.utils import decode_file, highlight_message, collect_source_files
-from core.compare import compare_types
-from core.ai import ai_prompt_for_type, call_ai_from_config, AI_FAILED
+from parsers.common import (
+    load_previous_type_cache,
+    write_types_cache,
+    enrich_type_definition,
+    summarize_ai_result,
+    is_missing_type_description,
+    refresh_type_definitions,
+)
 
 logger = logging.getLogger(__name__)
-AI_RESULT_PREVIEW_CHARS = 24
-
-
-def load_previous_type_cache(cache_path):
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            data.setdefault(
-                "description",
-                "Type definitions extracted from project header files (excluding commented-out ones).",
-            )
-            data.setdefault("type_definitions", {})
-            data.setdefault("type_references", {})
-            return data, cache_path
-        except (json.JSONDecodeError, OSError):
-            logger.warning("Failed to load previous type cache from %s", cache_path)
-
-    return {
-        "description": "Type definitions extracted from project header files (excluding commented-out ones).",
-        "type_definitions": {},
-        "type_references": {},
-    }, None
 
 
 def scan_project_types(project_dir):
@@ -64,140 +43,6 @@ def scan_project_types(project_dir):
             logger.warning("Duplicate type definition '%s' ignored", name)
 
     return unique_types
-
-
-def write_types_cache(cache_path, master_data):
-    master_types = master_data.get("type_definitions", {})
-    sorted_names = sorted(master_types.keys())
-    master_data["type_references"] = {
-        name: f"A_{idx+1}" for idx, name in enumerate(sorted_names)
-    }
-
-    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=os.path.dirname(cache_path), delete=False
-    ) as tmp_file:
-        json.dump(master_data, tmp_file, indent=2, ensure_ascii=False)
-        tmp_path = tmp_file.name
-    os.replace(tmp_path, cache_path)
-
-
-def enrich_type_definition(type_name, type_definition):
-    prompt = ai_prompt_for_type(type_name, type_definition)
-    description = call_ai_from_config(prompt)
-    type_definition["type_description"] = description
-    if description == AI_FAILED:
-        logger.debug("Marked type as AI failed: %s", type_name)
-    else:
-        logger.debug("Generated AI description for type: %s", type_name)
-    return type_definition["type_description"]
-
-
-def summarize_ai_result(description):
-    normalized = " ".join(str(description).split())
-    success = normalized != AI_FAILED
-    preview = normalized[:AI_RESULT_PREVIEW_CHARS]
-    if len(normalized) > AI_RESULT_PREVIEW_CHARS:
-        preview = f"{preview}..."
-    return "success" if success else "failed", preview
-
-
-def is_missing_type_description(type_definition):
-    description = type_definition.get("type_description")
-    if not isinstance(description, str) or not description.strip():
-        return True
-    return description == AI_FAILED
-
-
-def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", enable_ai=True):
-    folder_name = os.path.basename(os.path.normpath(project_dir))
-    cache_path = os.path.join(output_dir, f"{folder_name}_global_types.json")
-    previous_data, loaded_from = load_previous_type_cache(cache_path)
-    previous_types = previous_data.get("type_definitions", {})
-    diff = compare_types(previous_types, fresh_types)
-
-    added = diff.get("added", {})
-    modified = diff.get("modified", {})
-    removed = diff.get("removed", {})
-    changed_names = sorted(set(added.keys()) | set(modified.keys()))
-    if enable_ai:
-        missing_description_names = {
-            type_name
-            for type_name, type_definition in fresh_types.items()
-            if is_missing_type_description(previous_types.get(type_name, {}))
-        }
-        changed_names = sorted(set(changed_names) | missing_description_names)
-
-    logger.debug(
-        "Type changes: added=%s modified=%s removed=%s",
-        len(added),
-        len(modified),
-        len(removed),
-    )
-
-    master_data = {
-        "description": "Type definitions extracted from project header files (excluding commented-out ones).",
-        "type_definitions": copy.deepcopy(previous_types),
-    }
-    master_types = master_data["type_definitions"]
-
-    for type_name in removed.keys():
-        if type_name in master_types:
-            del master_types[type_name]
-            logger.debug("Removed type: %s", type_name)
-
-    for type_name in changed_names:
-        fresh_definition = copy.deepcopy(
-            modified.get(type_name) or added.get(type_name) or fresh_types[type_name]
-        )
-        if not enable_ai:
-            fresh_definition["type_description"] = ""
-            logger.debug("Left description empty for type without AI: %s", type_name)
-        master_types[type_name] = fresh_definition
-
-    should_persist_now = bool(
-        changed_names
-        or removed
-        or loaded_from != cache_path
-        or not os.path.exists(cache_path)
-    )
-
-    if enable_ai:
-        if changed_names:
-            logger.info(
-                highlight_message(
-                    "Refreshing AI descriptions for %s changed types"
-                ),
-                len(changed_names),
-            )
-        else:
-            logger.info(highlight_message("No types require AI refresh"))
-        for index, type_name in enumerate(changed_names, start=1):
-            description = enrich_type_definition(type_name, master_types[type_name])
-            status, preview = summarize_ai_result(description)
-            logger.info(
-                "AI progress %s/%s: %s [%s] %s",
-                index,
-                len(changed_names),
-                type_name,
-                status,
-                preview,
-            )
-            write_types_cache(cache_path, master_data)
-            time.sleep(0.15)
-    elif should_persist_now:
-        write_types_cache(cache_path, master_data)
-
-    if enable_ai and not changed_names and should_persist_now:
-        write_types_cache(cache_path, master_data)
-
-    logger.debug("Added: %s types", len(added))
-    logger.debug("Modified: %s types", len(modified))
-    logger.debug("Removed: %s types", len(removed))
-
-    logger.debug("Type definitions saved to %s", cache_path)
-    logger.debug("Total types found: %s", len(master_types))
-    return master_data
 
 
 def collect_type_definitions_with_comments(header_text, source_file):

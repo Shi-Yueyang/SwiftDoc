@@ -101,7 +101,7 @@ class TestBuildParser:
         p = build_parser("/tmp/cache")
         ns = p.parse_args(["generate", "/proj"])
         assert ns.lang == "c"
-        assert ns.ai == "oo"
+        assert ns.ai == "off"
         assert ns.cache_dir == "/tmp/cache"
         assert ns.output_folder == "out"
         assert ns.analyse_dir is None

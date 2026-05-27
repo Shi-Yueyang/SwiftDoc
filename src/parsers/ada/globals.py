@@ -8,6 +8,7 @@ import tree_sitter_ada
 from tree_sitter import Language, Parser
 
 from core.utils import get_node_text, decode_file, collect_source_files
+from parsers.ada._utils import find_ada_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +26,6 @@ def _is_inside_subprogram(node):
     return False
 
 
-def _find_identifier(node):
-    for child in node.children:
-        if child.is_named and child.type == "identifier":
-            return child
-    return None
-
-
 def collect_globals_from_ada_file(file_path):
     """Extract package-level variable declarations from a single Ada file."""
     with open(file_path, "rb") as f:
@@ -44,7 +38,7 @@ def collect_globals_from_ada_file(file_path):
 
     def traverse(node):
         if node.type == "object_declaration" and not _is_inside_subprogram(node):
-            name_node = _find_identifier(node)
+            name_node = find_ada_identifier(node)
             if name_node is None:
                 return
             var_name = get_node_text(name_node)

@@ -4,6 +4,8 @@ import pytest
 from parsers.ada.types import (
     collect_ada_types_from_file,
     scan_project_types,
+)
+from parsers.common import (
     is_missing_type_description,
     summarize_ai_result,
     AI_FAILED,

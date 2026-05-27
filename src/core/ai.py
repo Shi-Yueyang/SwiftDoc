@@ -22,14 +22,20 @@ def _get_client():
     return client, config["model_name"]
 
 
-def ai_prompt_for_type(type_name, definition):
+def _language_label(language):
+    labels = {"c": "C", "ada": "Ada"}
+    return labels.get(language, language.upper())
+
+
+def ai_prompt_for_type(type_name, definition, language="c"):
+    lang = _language_label(language)
     kind = definition.get("kind", "unknown")
     if kind == "struct":
         members = definition.get("members", [])
         members_str = "\n".join(members) if members else "无成员"
         prompt = dedent(
             f"""
-            你是一个嵌入式C代码分析专家。请用简洁的中文描述以下结构体的用途和含义。
+            你是一个嵌入式{lang}代码分析专家。请用简洁的中文描述以下结构体的用途和含义。
             结构体名：{type_name}
             成员列表：
             {members_str}
@@ -41,7 +47,7 @@ def ai_prompt_for_type(type_name, definition):
         members_str = "\n".join(members) if members else "无成员"
         prompt = dedent(
             f"""
-            描述以下联合体的用途和含义（用中文）。
+            你是一个嵌入式{lang}代码分析专家。描述以下联合体的用途和含义（用中文）。
             联合体名：{type_name}
             成员列表：
             {members_str}
@@ -53,7 +59,7 @@ def ai_prompt_for_type(type_name, definition):
         values_str = ", ".join(values) if values else "无枚举值"
         prompt = dedent(
             f"""
-            描述以下枚举类型的用途和含义（用中文）
+            你是一个嵌入式{lang}代码分析专家。描述以下枚举类型的用途和含义（用中文）
             枚举名：{type_name}
             枚举值：{values_str}
             请直接输出一段描述文字（不超过200字）。
@@ -63,7 +69,7 @@ def ai_prompt_for_type(type_name, definition):
         original_type = definition.get("original_type", "")
         prompt = dedent(
             f"""
-            描述以下类型别名的用途和含义（用中文）。
+            你是一个嵌入式{lang}代码分析专家。描述以下类型别名的用途和含义（用中文）。
             别名：{type_name}
             原始类型：{original_type}
             请直接输出一段描述文字（不超过150字）。
@@ -72,7 +78,8 @@ def ai_prompt_for_type(type_name, definition):
     return prompt
 
 
-def ai_prompt_for_function(func):
+def ai_prompt_for_function(func, language="c"):
+    lang = _language_label(language)
     inputs_info = []
     for inp in func['inputs']:
         inputs_info.append(f"- {inp['name']} (类型: {inp['type']}, 类别: {inp['kind']})")
@@ -81,7 +88,7 @@ def ai_prompt_for_function(func):
 
     prompt = dedent(
             f"""
-            你是一个嵌入式C代码分析专家。请分析以下函数，并用简洁的中文给出：
+            你是一个嵌入式{lang}代码分析专家。请分析以下函数，并用简洁的中文给出：
 
             1. 算法/逻辑描述：说明函数实现了什么算法或逻辑，不要重复代码内容。（不超过100字）
             2. 每个输入项的作用（包括形参和全局变量）。请说明在该函数中的作用以及其含义，**每个输入项的描述控制在30字以内**。

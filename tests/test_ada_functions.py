@@ -11,11 +11,13 @@ from parsers.ada.functions import (
     build_global_lookup,
     is_variable_written,
     scan_all_functions,
+    _get_subprogram_spec,
+)
+from parsers.ada._utils import find_ada_identifier
+from parsers.common import (
     is_missing_algorithm_logic,
     summarize_ai_result,
     AI_FAILED,
-    _find_identifier,
-    _get_subprogram_spec,
 )
 from tree_sitter import Language, Parser
 import tree_sitter_ada
@@ -38,7 +40,7 @@ def _find_subprogram_body(root_node, name):
         if node.type == "subprogram_body":
             spec = _get_subprogram_spec(node)
             if spec:
-                ident = _find_identifier(spec)
+                ident = find_ada_identifier(spec)
                 if ident and ident.text.decode("utf-8") == name:
                     return node
         for child in node.children:

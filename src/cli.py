@@ -106,7 +106,7 @@ def build_parser(default_cache_dir):
     generate_parser.add_argument(
         "--ai",
         choices=["on", "off"],
-        default="oo",
+        default="off",
         help="Enable AI for type/function analysis and interactive onboarding when config is missing",
     )
     generate_parser.add_argument(

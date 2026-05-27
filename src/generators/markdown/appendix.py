@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Dict, Any, List, Tuple, Optional, Set
 
-from generators.common import remove_c_comments, generate_definition
+from generators.common import generate_definition
 
 
 logger = logging.getLogger(__name__)

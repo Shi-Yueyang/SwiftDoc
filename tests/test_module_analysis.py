@@ -10,6 +10,8 @@ from parsers.c.functions import (
     normalize_c_code,
     build_global_lookup,
     resolve_global_info,
+)
+from parsers.common import (
     load_previous_function_cache,
     write_function_cache,
     prepare_function_metadata,

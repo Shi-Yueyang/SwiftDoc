@@ -4,8 +4,6 @@ Extract all global variables (including static) from .c and .h files in a given 
 Outputs a JSON file with variable name, type, file, kind (definition/extern), and is_static flag.
 """
 
-import os
-import json
 import logging
 import chardet
 import tree_sitter_c
@@ -167,23 +165,3 @@ def extract_all_globals(project_dir):
             # If a definition already exists, don't overwrite with extern
 
     return list(all_globals.values())
-
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Extract global variables from C/C++ project.")
-    parser.add_argument("project_dir", nargs='?', default="ATP_CODE", help="Root directory of the project (contains .c and .h files)")
-    parser.add_argument("--output", "-o", default=".analysis", help="Output directory (default: .analysis)")
-    parser.add_argument("--outfile", "-f", default="global_variables.json", help="Output JSON filename (default: global_variables.json)")
-    args = parser.parse_args()
-
-    globals_list = extract_all_globals(args.project_dir)
-    os.makedirs(args.output, exist_ok=True)
-    output_file = os.path.join(args.output, args.outfile)
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump({"globals": globals_list}, f, indent=2, ensure_ascii=False)
-    logger.info("Saved %s global variables to %s", len(globals_list), output_file)
-
-
-if __name__ == "__main__":
-    main()

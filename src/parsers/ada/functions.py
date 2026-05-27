@@ -8,40 +8,30 @@ call extraction, global variable tracking, and nested subprograms.
 import os
 import re
 import json
-import time
 import logging
-import tempfile
-import copy
 
 import tree_sitter_ada
 from tree_sitter import Language, Parser
 
 from core.utils import get_node_text, decode_file, highlight_message, collect_source_files
-from core.ai import ai_prompt_for_function, call_ai_from_config, AI_FAILED
-from core.compare import compare_functions
+from parsers.ada._utils import find_ada_identifier
+from parsers.common import (
+    load_previous_function_cache,
+    write_function_cache,
+    prepare_function_metadata,
+    enrich_function_with_ai,
+    summarize_ai_result,
+    is_missing_algorithm_logic,
+    refresh_functions,
+)
 
 logger = logging.getLogger(__name__)
-AI_RESULT_PREVIEW_CHARS = 24
 
 ADA_LANGUAGE = Language(tree_sitter_ada.language())
 ada_parser = Parser(ADA_LANGUAGE)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-
-def _find_identifier(node):
-    for child in node.children:
-        if child.is_named and child.type == "identifier":
-            return child
-    return None
-
-
-def _find_child_by_type(node, child_type):
-    for child in node.children:
-        if child.type == child_type:
-            return child
-    return None
-
 
 def _get_subprogram_spec(body_node):
     """Return the procedure_specification or function_specification child."""
@@ -111,7 +101,7 @@ def extract_return_type(spec_node):
     """Extract the return type from a function_specification."""
     for child in spec_node.children:
         if child.type == "result_profile":
-            type_id = _find_identifier(child)
+            type_id = find_ada_identifier(child)
             if type_id:
                 return get_node_text(type_id)
     return None
@@ -285,7 +275,7 @@ def extract_subprograms_from_file(file_path, type_refs, global_lookup):
         if spec_node is None:
             continue
 
-        name_id = _find_identifier(spec_node)
+        name_id = find_ada_identifier(spec_node)
         if name_id is None:
             continue
         func_name = get_node_text(name_id)
@@ -400,160 +390,3 @@ def scan_all_functions(project_dir, types_data, global_vars):
         func["called_by"] = called_by_map.get(func["name"], [])
 
     return all_functions
-
-
-# ── cache / refresh / AI (reused pattern from C parser) ─────────────────────
-
-def load_previous_function_cache(output_json_path):
-    if os.path.exists(output_json_path):
-        try:
-            with open(output_json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            data.setdefault("functions", [])
-            return data, output_json_path
-        except (json.JSONDecodeError, OSError):
-            logger.warning("Failed to load previous function cache from %s", output_json_path)
-    return {"functions": []}, None
-
-
-def write_function_cache(output_json_path, output_data):
-    os.makedirs(os.path.dirname(output_json_path), exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=os.path.dirname(output_json_path), delete=False
-    ) as tmp_file:
-        json.dump(output_data, tmp_file, indent=2, ensure_ascii=False)
-        tmp_path = tmp_file.name
-    os.replace(tmp_path, output_json_path)
-
-
-def prepare_function_metadata(func, type_descriptions=None):
-    func["algorithm_logic"] = func.get("algorithm_logic", "")
-
-    if isinstance(func.get("returns"), list) and func["returns"] and isinstance(func["returns"][0], str):
-        func["returns"] = [{"expression": expr, "return_description": ""} for expr in func["returns"]]
-    else:
-        for ret in func.get("returns", []):
-            ret["return_description"] = ret.get("return_description", "")
-
-    for inp in func.get("inputs", []):
-        inp["inputs_description"] = inp.get("inputs_description", "")
-        if inp.get("kind") == "Global variable":
-            base_type_match = re.search(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", inp["type"])
-            base_type = base_type_match.group(1) if base_type_match else inp["type"]
-            inp["type_description"] = (type_descriptions or {}).get(base_type, "")
-
-
-def enrich_function_with_ai(func, type_descriptions):
-    prepare_function_metadata(func, type_descriptions)
-    prompt = ai_prompt_for_function(func)
-    response = call_ai_from_config(prompt)
-    if response != AI_FAILED:
-        try:
-            desc = json.loads(response)
-            func["algorithm_logic"] = desc.get("algorithm_logic", "")
-            param_descs = {
-                item["name"]: item.get("inputs_description", "")
-                for item in desc.get("inputs_description", [])
-            }
-            for inp in func.get("inputs", []):
-                inp["inputs_description"] = param_descs.get(inp["name"], inp.get("inputs_description", ""))
-            return_descs = desc.get("return_values", [])
-            for idx, ret_item in enumerate(func.get("returns", [])):
-                ret_item["return_description"] = return_descs[idx] if idx < len(return_descs) else ""
-        except json.JSONDecodeError as exc:
-            logger.debug("JSON parse failed: %s", exc)
-            func["algorithm_logic"] = AI_FAILED
-    else:
-        func["algorithm_logic"] = AI_FAILED
-    return func["algorithm_logic"]
-
-
-def summarize_ai_result(description):
-    normalized = " ".join(str(description).split())
-    success = normalized != AI_FAILED
-    preview = normalized[:AI_RESULT_PREVIEW_CHARS]
-    if len(normalized) > AI_RESULT_PREVIEW_CHARS:
-        preview = f"{preview}..."
-    return "success" if success else "failed", preview
-
-
-def is_missing_algorithm_logic(func):
-    logic = func.get("algorithm_logic")
-    if not isinstance(logic, str) or not logic.strip():
-        return True
-    return logic == AI_FAILED
-
-
-def refresh_functions(all_functions, output_json_path, types_data, enable_ai=True):
-    type_descriptions = {
-        name: info["type_description"]
-        for name, info in types_data.get("type_definitions", {}).items()
-        if isinstance(info, dict) and "type_description" in info
-    }
-    previous_data, loaded_from = load_previous_function_cache(output_json_path)
-    previous_functions = previous_data.get("functions", [])
-
-    def _func_key(f):
-        return (f["name"], f["file"])
-
-    diff = compare_functions(previous_functions, all_functions)
-
-    added = diff.get("added", [])
-    modified = diff.get("modified", [])
-    removed = diff.get("removed", [])
-    changed_functions = [*added, *(item["new"] for item in modified)]
-
-    if enable_ai:
-        missing_logic_keys = {
-            _func_key(func)
-            for func in previous_functions
-            if is_missing_algorithm_logic(func)
-        }
-        changed_map = {_func_key(f): f for f in changed_functions}
-        for func in all_functions:
-            if _func_key(func) in missing_logic_keys:
-                changed_map[_func_key(func)] = func
-        changed_functions = list(changed_map.values())
-
-    output_data = {"functions": copy.deepcopy(previous_functions)}
-    function_map = {_func_key(f): f for f in output_data["functions"]}
-
-    for func in removed:
-        key = _func_key(func)
-        if key in function_map:
-            del function_map[key]
-
-    for func in changed_functions:
-        fresh_function = copy.deepcopy(func)
-        if not enable_ai:
-            fresh_function["algorithm_logic"] = ""
-        prepare_function_metadata(fresh_function, type_descriptions)
-        function_map[_func_key(fresh_function)] = fresh_function
-
-    should_persist = bool(
-        changed_functions or removed or loaded_from != output_json_path
-        or not os.path.exists(output_json_path)
-    )
-
-    if enable_ai:
-        if changed_functions:
-            logger.info(highlight_message("Refreshing AI descriptions for %s changed functions"), len(changed_functions))
-        else:
-            logger.info(highlight_message("No functions require AI refresh"))
-        for idx, func in enumerate(changed_functions, start=1):
-            current = function_map[_func_key(func)]
-            description = enrich_function_with_ai(current, type_descriptions)
-            status, preview = summarize_ai_result(description)
-            logger.info("AI progress %s/%s: %s [%s] %s", idx, len(changed_functions), current["name"], status, preview)
-            output_data["functions"] = list(function_map.values())
-            write_function_cache(output_json_path, output_data)
-            time.sleep(0.5)
-    elif should_persist:
-        output_data["functions"] = list(function_map.values())
-        write_function_cache(output_json_path, output_data)
-
-    if enable_ai and not changed_functions and should_persist:
-        output_data["functions"] = list(function_map.values())
-        write_function_cache(output_json_path, output_data)
-
-    return output_json_path

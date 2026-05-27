@@ -6,6 +6,7 @@ import sys
 from parsers import get_parser
 from generators import get_generator, get_format_extension
 from generators.images import generate_function_graphs
+from core.utils import build_cache_name
 
 
 logger = logging.getLogger(__name__)
@@ -22,10 +23,7 @@ def colorize_extract_phase_message(message, color):
 
 
 def build_analysis_paths(cache_dir, project_root):
-    if os.path.isfile(project_root):
-        folder_name = os.path.basename(os.path.dirname(os.path.normpath(project_root)))
-    else:
-        folder_name = os.path.basename(os.path.normpath(project_root))
+    folder_name = build_cache_name(project_root)
     return {
         "globals": os.path.join(cache_dir, f"{folder_name}_global_variables.json"),
         "types": os.path.join(cache_dir, f"{folder_name}_global_types.json"),

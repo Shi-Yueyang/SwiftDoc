@@ -124,3 +124,18 @@ def collect_source_files(project_dir, extensions):
         logger = logging.getLogger(__name__)
         logger.info("Found %s files (%s)", len(files), ", ".join(extensions))
     return files
+
+
+def build_cache_name(project_root):
+    """Build a collision-resistant cache folder name from an absolute project path.
+
+    Format: parent_basename_hash6 (e.g. ``examples_c_4fd076``).
+    """
+    import hashlib
+    abs_path = os.path.abspath(project_root)
+    if os.path.isfile(abs_path):
+        abs_path = os.path.dirname(abs_path)
+    parent = os.path.basename(os.path.dirname(abs_path))
+    basename = os.path.basename(abs_path)
+    h = hashlib.md5(abs_path.encode()).hexdigest()[:6]
+    return f"{parent}_{basename}_{h}"

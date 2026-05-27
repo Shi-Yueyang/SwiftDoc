@@ -55,7 +55,7 @@ python -m cli config temperature 0.7          # set individual config values
 
 - Cache JSON files are named `{folder_name}_{globals|functions|global_types}.json` where `folder_name` is the basename of the project root.
 - Function identity key is `(name, file)` tuple — this allows static functions in different translation units to coexist.
-- The `--ai` flag accepts `"on"` or `"oo"` (a typo preserved as the default meaning "off").
+- The `--ai` flag accepts `"on"` or `"off"` (default: `"off"`).
 - Encoding: files are decoded with chardet detection; `gb18030` is the fallback for Chinese-encoded source.
 - `examples/c/` is a sample C project used for both manual testing and as a reference.
 - ANSI color output is gated on `sys.stderr.isatty()` for piped/redirected usage.
