@@ -100,3 +100,19 @@ examples/
 ├── c/                         # sample C project for testing
 └── ada/                       # sample Ada project for testing
 ```
+
+## Running Tests
+
+```bash
+# All tests
+pytest tests/ -v
+
+# A single test file
+pytest tests/test_ada_functions.py -v
+
+# A single test
+pytest tests/test_ada_functions.py::TestExtractParameters::test_in_out_mode_parameter -v
+
+# Exclude broken test files
+pytest tests/ -v --ignore=tests/test_cli.py
+```

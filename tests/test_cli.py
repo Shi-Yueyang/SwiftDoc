@@ -79,10 +79,10 @@ class TestBuildParser:
     def test_parser_has_generate_subcommand(self):
         p = build_parser("/tmp/cache")
         p.print_help()
-        # generate should be a valid subcommand
-        ns = p.parse_args(["generate", "c", "/some/project"])
+        ns = p.parse_args(["generate", "/some/project"])
         assert ns.command == "generate"
         assert ns.root_dir == "/some/project"
+        assert ns.lang == "c"  # default
 
     def test_parser_has_config_subcommand(self):
         p = build_parser("/tmp/cache")
@@ -99,7 +99,8 @@ class TestBuildParser:
 
     def test_generate_defaults(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "c", "/proj"])
+        ns = p.parse_args(["generate", "/proj"])
+        assert ns.lang == "c"
         assert ns.ai == "oo"
         assert ns.cache_dir == "/tmp/cache"
         assert ns.output_folder == "out"
@@ -107,17 +108,22 @@ class TestBuildParser:
 
     def test_generate_with_ai_on(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "c", "/proj", "--ai", "on"])
+        ns = p.parse_args(["generate", "/proj", "--ai", "on"])
         assert ns.ai == "on"
+
+    def test_generate_with_ada_lang(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["generate", "/proj", "--lang", "ada"])
+        assert ns.lang == "ada"
 
     def test_generate_with_multiple_analyse_dirs(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "c", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])
+        ns = p.parse_args(["generate", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])
         assert ns.analyse_dir == ["/proj/a", "/proj/b"]
 
     def test_verbose_flag(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["--verbose", "generate", "c", "/proj"])
+        ns = p.parse_args(["--verbose", "generate", "/proj"])
         assert ns.verbose is True
 
 
