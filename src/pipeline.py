@@ -153,6 +153,6 @@ def run_docgen_phase(args):
 
     appendix_ext = get_format_extension(output_format)
     appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
-    generator.generate_appendix(types_json, appendix_output, filter_types=None)
+    generator.generate_appendix(types_json, appendix_output, filter_types=None, language=getattr(args, "language", "c"))
 
     logger.info(colorize_extract_phase_message("It's done.", EXTRACT_PHASE_DONE_COLOR))

@@ -10,7 +10,10 @@ python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate 
 pip install -e .
 
 # Run on the built-in C example (no AI needed)
-python -m cli generate c examples/c --ai off
+python -m cli generate examples/c --ai off
+
+# Run on the Ada example
+python -m cli generate examples/ada --lang ada --ai off
 
 # Open the generated docs
 #   out/          — markdown files per function
@@ -23,28 +26,32 @@ python -m cli generate c examples/c --ai off
 ### `generate` — full analysis + docs
 
 ```bash
-# Entire project
-python -m cli generate c examples/c --ai off
+# Entire project (language defaults to C)
+python -m cli generate examples/c --ai off
+
+# Ada project
+python -m cli generate examples/ada --lang ada --ai off
 
 # Specific subdirectories or files
-python -m cli generate c examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
 
 # Single file
-python -m cli generate c examples/c --analyse_dir examples/c/comm/sensor.c --ai off
+python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --ai off
 
 # With custom cache/output paths
-python -m cli generate c examples/c --cache_dir .analysis --output_folder out_docs --ai on
+python -m cli generate examples/c --cache_dir .analysis --output_folder out_docs --ai on
 ```
 
 | Argument | Default | Description |
 |---|---|---|
-| `lang` | *(required)* | Source language (e.g. `c`) |
 | `root_dir` | *(required)* | Project root for the extract phase |
+| `--lang` | `c` | Source language (`c`, `ada`) |
 | `--analyse_dir` | root_dir | Subset to generate docs for (repeatable) |
 | `--cache_dir` | platform cache | Intermediate JSON directory |
 | `--output_folder` | `out` | Output directory for docs and figures |
 | `--ai` | `oo` | `on` / `off` for AI-generated descriptions |
-| `--format` | `markdown` | Output documentation format |
+| `--format` | `markdown` | Output documentation format (`markdown`, `docx`) |
+| `--group-by` | `function` | Group docs per `function` or per `file` |
 | `--verbose` | off | Enable debug logging |
 
 ### `config` — manage AI settings
@@ -82,11 +89,14 @@ src/
 ├── core/                      # shared utils, AI, compare
 ├── parsers/
 │   ├── base.py                # BaseParser ABC — subclass to add a language
-│   └── c/                     # C language parser
+│   ├── c/                     # C language parser
+│   └── ada/                   # Ada language parser
 ├── generators/
 │   ├── markdown/              # markdown doc generator
+│   ├── docx/                  # docx doc generator
 │   └── images.py              # call-graph generator
 
 examples/
-└── c/                         # sample C project for testing
+├── c/                         # sample C project for testing
+└── ada/                       # sample Ada project for testing
 ```

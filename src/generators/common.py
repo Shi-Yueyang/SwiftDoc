@@ -17,8 +17,14 @@ def remove_c_comments(text: str) -> str:
     return text.strip()
 
 
-def generate_definition(type_name: str, info: dict[str, Any]) -> str:
-    """Generate a C type definition string using \\n as line separator."""
+def generate_definition(type_name: str, info: dict[str, Any], language: str = "c") -> str:
+    """Generate a type definition string using \\n as line separator."""
+    if language == "ada":
+        return _generate_ada_definition(type_name, info)
+    return _generate_c_definition(type_name, info)
+
+
+def _generate_c_definition(type_name: str, info: dict[str, Any]) -> str:
     kind = info.get("kind", "unknown")
     if kind == "struct":
         members = info.get("members", [])
@@ -45,6 +51,27 @@ def generate_definition(type_name: str, info: dict[str, Any]) -> str:
         return f"typedef {original_clean} {type_name};"
     else:
         return f"/* unknown kind: {kind} */ {type_name}"
+
+
+def _generate_ada_definition(type_name: str, info: dict[str, Any]) -> str:
+    kind = info.get("kind", "unknown")
+    if kind == "struct":
+        members = info.get("members", [])
+        if members:
+            members_str = "\n   ".join(members)
+            return f"type {type_name} is record\n   {members_str}\nend record;"
+        return f"type {type_name} is record\n   null;\nend record;"
+    elif kind == "enum":
+        values = info.get("values", [])
+        if values:
+            values_str = ", ".join(values)
+            return f"type {type_name} is ({values_str});"
+        return f"type {type_name} is (); -- no values"
+    elif kind == "typedef":
+        original = info.get("original_type", "")
+        return f"type {type_name} is {original};"
+    else:
+        return f"-- unknown kind: {kind} {type_name}"
 
 
 def normalize_function_for_doc(func: dict[str, Any]) -> dict[str, Any]:

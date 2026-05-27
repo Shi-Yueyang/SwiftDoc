@@ -81,7 +81,7 @@ def _create_document():
     return doc
 
 
-def generate_appendix_docx(types_json_path: str, output_docx_path: str, filter_types: Optional[Set[str]] = None) -> None:
+def generate_appendix_docx(types_json_path: str, output_docx_path: str, filter_types: Optional[Set[str]] = None, language: str = "c") -> None:
     if not os.path.exists(types_json_path):
         logger.warning("Types cache file not found: %s", types_json_path)
         return
@@ -101,7 +101,7 @@ def generate_appendix_docx(types_json_path: str, output_docx_path: str, filter_t
         if filter_types is not None and type_name not in filter_types:
             continue
         info = type_defs[type_name]
-        definition = generate_definition(type_name, info)
+        definition = generate_definition(type_name, info, language=language)
         description = info.get("type_description", "").strip()
         if not description:
             description = "No description"

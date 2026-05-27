@@ -197,6 +197,7 @@ def main():
         output_folder=cli_args.output_folder,
         format=getattr(cli_args, "format", "markdown"),
         group_by=getattr(cli_args, "group_by", "function"),
+        language=cli_args.lang,
     )
     run_docgen_phase(docgen_args)
 

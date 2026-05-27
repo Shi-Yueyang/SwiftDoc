@@ -13,9 +13,11 @@ Each parser instance provides:
 """
 
 from parsers.c import CParser
+from parsers.ada import AdaParser
 
 _PARSERS = {
     "c": CParser(),
+    "ada": AdaParser(),
 }
 
 

@@ -10,7 +10,7 @@ from generators.common import remove_c_comments, generate_definition
 logger = logging.getLogger(__name__)
 
 
-def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types: Optional[Set[str]] = None) -> None:
+def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types: Optional[Set[str]] = None, language: str = "c") -> None:
     if not os.path.exists(types_json_path):
         logger.warning("Types cache file not found: %s", types_json_path)
         return
@@ -30,7 +30,7 @@ def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types
         if filter_types is not None and type_name not in filter_types:
             continue
         info = type_defs[type_name]
-        definition = generate_definition(type_name, info).replace("\n", "<br>")
+        definition = generate_definition(type_name, info, language=language).replace("\n", "<br>")
         description = info.get("type_description", "").strip()
         if not description:
             description = "No description"

@@ -59,3 +59,14 @@ python -m cli config temperature 0.7          # set individual config values
 - Encoding: files are decoded with chardet detection; `gb18030` is the fallback for Chinese-encoded source.
 - `examples/c/` is a sample C project used for both manual testing and as a reference.
 - ANSI color output is gated on `sys.stderr.isatty()` for piped/redirected usage.
+
+## Communication Style
+
+Speak warmly and naturally.
+
+Use affectionate words occasionally:
+
+- dear
+- sweetie
+
+Avoid repetition.
