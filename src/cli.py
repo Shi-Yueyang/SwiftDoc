@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 from config.manager import ensure_ai_config_interactive, rerun_ai_config_interactive, set_config_value
+from parsers import detect_language
 from pipeline import run_extract_phase, run_docgen_phase
 from core.utils import get_default_cache_dir
 
@@ -80,8 +81,8 @@ def build_parser(default_cache_dir):
     )
     generate_parser.add_argument(
         "--lang",
-        default="c",
-        help="Source language for parsing (default: c)",
+        default="auto",
+        help="Source language for parsing (auto-detected if not specified, default: auto)",
     )
     generate_parser.add_argument(
         "root_dir",
@@ -180,6 +181,9 @@ def main():
     if cli_args.command == "generate":
         if cli_args.ai == "on":
             ensure_ai_config_interactive()
+
+        if cli_args.lang == "auto":
+            cli_args.lang = detect_language(cli_args.root_dir)
 
         extract_args = argparse.Namespace(
             root_dir=cli_args.root_dir,

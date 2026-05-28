@@ -44,6 +44,7 @@ def run_extract_phase(args):
     parser = get_parser(args.language)
 
     logger.info(colorize_extract_phase_message("Scanning begins...", EXTRACT_PHASE_START_COLOR))
+    logger.info("Language: %s", args.language)
     os.makedirs(args.cache_dir, exist_ok=True)
     enable_ai = getattr(args, "ai", "on") == "on"
 

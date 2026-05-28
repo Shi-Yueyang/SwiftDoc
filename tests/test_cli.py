@@ -82,7 +82,7 @@ class TestBuildParser:
         ns = p.parse_args(["generate", "/some/project"])
         assert ns.command == "generate"
         assert ns.root_dir == "/some/project"
-        assert ns.lang == "c"  # default
+        assert ns.lang == "auto"  # default
 
     def test_parser_has_config_subcommand(self):
         p = build_parser("/tmp/cache")
@@ -100,7 +100,7 @@ class TestBuildParser:
     def test_generate_defaults(self):
         p = build_parser("/tmp/cache")
         ns = p.parse_args(["generate", "/proj"])
-        assert ns.lang == "c"
+        assert ns.lang == "auto"
         assert ns.ai == "off"
         assert ns.cache_dir == "/tmp/cache"
         assert ns.output_folder == "out"
