@@ -4,7 +4,7 @@
 
 int arr[10];
 
-void hello(int* input, BYTE_8* output, int* mixed){
+int hello(int* input, BYTE_8* output, int* mixed){
     arr[0] = 0;
     int temp = *input+3 + *mixed;
     *output += 2;

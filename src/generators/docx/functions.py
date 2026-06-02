@@ -93,7 +93,7 @@ def _add_input_table(doc, inputs, heading_level):
     doc.add_paragraph()
 
 
-def _add_output_table(doc, returns, heading_level):
+def _add_output_table(doc, returns, heading_level, return_type=""):
     doc.add_heading("输出项", level=heading_level)
     table = doc.add_table(rows=1, cols=4)
     table.style = "Table Grid"
@@ -101,13 +101,14 @@ def _add_output_table(doc, returns, heading_level):
         "标识符ID", "类型Type", "输出方式Output mode", "描述Description",
     ])
 
+    ret_type_text = return_type or "N/A"
     if returns and isinstance(returns, list):
         valid = [r for r in returns if r.get("expression") or r.get("return_description")]
         if valid:
             for ret in valid:
                 row = table.add_row()
                 _set_cell_text(row.cells[0], ret.get("expression", ""))
-                _set_cell_text(row.cells[1], "N/A")
+                _set_cell_text(row.cells[1], ret_type_text)
                 _set_cell_text(row.cells[2], "Return")
                 _set_cell_text(row.cells[3], ret.get("return_description", "") or "N/A")
         else:
@@ -196,7 +197,8 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
     run.bold = True
 
     _add_input_table(doc, func.get("inputs", []), heading_level + 1)
-    _add_output_table(doc, func.get("returns", []), heading_level + 1)
+    _add_output_table(doc, func.get("returns", []), heading_level + 1,
+                      return_type=func.get("return_type", ""))
     _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map, heading_level + 1)
     _add_local_data_table(doc, heading_level + 1)
     _add_algorithm_section(doc, func.get("algorithm_logic", ""), heading_level + 1)

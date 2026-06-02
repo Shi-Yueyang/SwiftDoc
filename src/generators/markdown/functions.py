@@ -44,7 +44,8 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir):
             for ret in valid_returns:
                 expr = ret.get("expression", "")
                 ret_desc = ret.get("return_description", "") or "N/A"
-                lines.append(f"| {expr} | N/A | Return | {ret_desc} |")
+                ret_type = func.get("return_type", "") or "N/A"
+                lines.append(f"| {expr} | {ret_type} | Return | {ret_desc} |")
         else:
             lines.append("| N/A | N/A | N/A | N/A |")
     else:

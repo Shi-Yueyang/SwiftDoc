@@ -508,3 +508,27 @@ class TestExtractFunctionsFromCFile:
         funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
         names = [f["name"] for f in funcs]
         assert "normal" in names
+
+    def test_return_type_void(self, tmp_dir):
+        code = "void foo(void) { }"
+        path = os.path.join(tmp_dir, "test_rt_void.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        assert funcs[0]["return_type"] == "void"
+
+    def test_return_type_int(self, tmp_dir):
+        code = "int bar(int x) { return x; }"
+        path = os.path.join(tmp_dir, "test_rt_int.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        assert funcs[0]["return_type"] == "int"
+
+    def test_return_type_pointer(self, tmp_dir):
+        code = "int* baz(void) { return 0; }"
+        path = os.path.join(tmp_dir, "test_rt_ptr.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        assert funcs[0]["return_type"] == "int*"
