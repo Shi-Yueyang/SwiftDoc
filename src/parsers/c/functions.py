@@ -51,13 +51,31 @@ def find_parameters(declarator_node):
             if param_name_node is None:
                 continue
             param_name = get_node_text(param_name_node)
-            type_node = param.child_by_field_name("type")
-            if type_node is not None:
-                param_type = get_node_text(type_node).strip()
-            else:
+            # Build full type: type_node gives the base type (int, char, etc.),
+            # but pointer stars live in pointer_declarator children.
+            type_parts = []
+            for child in param.children:
+                if child.type in ("pointer_declarator", "array_declarator",
+                                  "function_declarator"):
+                    continue  # declarators wrap the name, handled below
+                if child == param_name_node:
+                    continue
+                if child.type == "identifier" and child != param_name_node:
+                    continue
+                type_parts.append(get_node_text(child).strip())
+            # Fallback: extract everything before the identifier from full text
+            if not type_parts:
                 full_text = get_node_text(param)
                 param_type = full_text.replace(param_name, "").strip()
                 param_type = param_type.rstrip(",").strip()
+            else:
+                param_type = " ".join(type_parts).strip()
+            # Also check the declarator for pointer stars
+            for child in param.children:
+                if child.type in ("pointer_declarator",):
+                    for sub in child.children:
+                        if sub.type == "*":
+                            param_type += "*"
             params.append({"name": param_name, "type": param_type})
     return params
 
@@ -198,6 +216,79 @@ def resolve_global_info(global_lookup, c_file_path, name):
     return global_lookup["external"].get(name)
 
 
+def _analyze_pointer_directions(body_node, pointer_param_names):
+    """Determine direction (in/out/in out) for pointer parameters by analyzing body usage.
+
+    Walks the function body looking for pointer_expression nodes (*param).
+    If the dereferenced pointer is only read → "in",
+    only written (LHS of =, +=, -=, etc.) → "out",
+    both read and written (separate contexts, or ++/--) → "in out".
+    """
+    usage = {p: {"read": False, "write": False} for p in pointer_param_names}
+    if body_node is None:
+        return {p: "in" for p in pointer_param_names}
+
+    stack = [body_node]
+    while stack:
+        node = stack.pop()
+        if node.type == "pointer_expression":
+            ident = find_identifier(node)
+            if ident:
+                name = get_node_text(ident)
+                if name in pointer_param_names:
+                    parent = node.parent
+                    if parent is not None and parent.type == "assignment_expression":
+                        # tree-sitter node identity is not reliable; compare byte positions.
+                        # assignment_expression children: [left, operator, right]
+                        is_left = (parent.children and
+                                   parent.children[0].start_byte == node.start_byte)
+                        if is_left:
+                            usage[name]["write"] = True
+                            # Compound assignments (+=, -=, ...) count as write-only
+                            # for parameter direction purposes.
+                        else:
+                            usage[name]["read"] = True
+                    elif parent is not None and parent.type == "update_expression":
+                        # ++/--: both read and write the pointed-to value
+                        usage[name]["read"] = True
+                        usage[name]["write"] = True
+                    else:
+                        usage[name]["read"] = True
+        for child in node.children:
+            stack.append(child)
+
+    result = {}
+    for name, acc in usage.items():
+        if acc["read"] and acc["write"]:
+            result[name] = "in out"
+        elif acc["write"]:
+            result[name] = "out"
+        else:
+            result[name] = "in"
+    return result
+
+
+def _extract_return_type(func_node):
+    """Extract the full return type from a function_definition node, including pointer stars."""
+    type_node = func_node.child_by_field_name("type")
+    return_type = get_node_text(type_node).strip() if type_node else "unknown"
+
+    declarator = func_node.child_by_field_name("declarator")
+    if declarator:
+        node = declarator
+        while node is not None and node.type == "pointer_declarator":
+            return_type += "*"
+            # Advance to the nested declarator
+            next_node = None
+            for child in node.children:
+                if child.type in ("function_declarator", "pointer_declarator",
+                                  "array_declarator", "identifier"):
+                    next_node = child
+                    break
+            node = next_node
+    return return_type
+
+
 def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
     """
     Parse a single .c file and return a list of information for all functions in the file.
@@ -213,9 +304,13 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
     root_node = tree.root_node
 
     functions = []
-    for child in root_node.children:
-        if child.type == "function_definition":
-            declarator_node = child.child_by_field_name("declarator")
+    # Walk recursively: functions inside #ifdef / #if / #else are nested
+    # under preproc_* nodes, not direct children of translation_unit.
+    outer_stack = [root_node]
+    while outer_stack:
+        node = outer_stack.pop()
+        if node.type == "function_definition":
+            declarator_node = node.child_by_field_name("declarator")
             if declarator_node is None:
                 continue
             func_name_node = find_identifier(declarator_node)
@@ -223,7 +318,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                 continue
             function_name = get_node_text(func_name_node)
 
-            body_node = child.child_by_field_name("body")
+            body_node = node.child_by_field_name("body")
             body_code = ""
             if body_node:
                 full_body_text = get_node_text(body_node)
@@ -237,6 +332,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
 
             params = find_parameters(declarator_node)
             inputs = []
+            pointer_params = set()
             for p in params:
                 inputs.append(
                     {
@@ -247,26 +343,34 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                         "type_ref": "",
                     }
                 )
+                if "*" in p["type"]:
+                    pointer_params.add(p["name"])
+
+            # Analyze pointer parameter directions from body usage
+            pointer_directions = _analyze_pointer_directions(body_node, pointer_params)
+            for inp in inputs:
+                if inp["name"] in pointer_directions:
+                    inp["direction"] = pointer_directions[inp["name"]]
 
             if body_node:
                 global_written = set()
                 global_read = set()
                 referenced_globals = {}
-                stack = [body_node]
-                while stack:
-                    node = stack.pop()
-                    if node.type == "identifier":
-                        name = get_node_text(node)
+                global_stack = [body_node]
+                while global_stack:
+                    gnode = global_stack.pop()
+                    if gnode.type == "identifier":
+                        name = get_node_text(gnode)
                         global_info = resolve_global_info(global_lookup, c_file_path, name)
                         if global_info is not None:
                             referenced_globals[name] = global_info
-                            if is_identifier_written(node):
+                            if is_identifier_written(gnode):
                                 global_written.add(name)
                             else:
                                 global_read.add(name)
                     else:
-                        for sub in node.children:
-                            stack.append(sub)
+                        for sub in gnode.children:
+                            global_stack.append(sub)
 
                 for gname in global_read | global_written:
                     ginfo = referenced_globals[gname]
@@ -285,6 +389,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                         }
                     )
 
+            return_type = _extract_return_type(node)
             return_exprs = find_return_statements(body_node)
             calls = extract_calls_from_body(body_node)
 
@@ -292,6 +397,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                 {
                     "name": function_name,
                     "file": c_file_path,
+                    "return_type": return_type,
                     "inputs": inputs,
                     "returns": return_exprs,
                     "body_code": body_code,
@@ -299,6 +405,9 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                     "calls": calls,
                 }
             )
+        else:
+            for child in node.children:
+                outer_stack.append(child)
     return functions
 
 

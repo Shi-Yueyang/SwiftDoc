@@ -17,6 +17,7 @@ dependencies = [
   "tree-sitter-c==0.24.1",
   "tree-sitter-ada==0.1.0",
   "socksio==1.0.0",
+  "pyinstaller>=6.0.0",
 ]
 
 [project.scripts]

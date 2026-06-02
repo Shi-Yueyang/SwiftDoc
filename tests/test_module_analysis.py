@@ -10,6 +10,8 @@ from parsers.c.functions import (
     normalize_c_code,
     build_global_lookup,
     resolve_global_info,
+    _analyze_pointer_directions,
+    extract_functions_from_c_file,
 )
 from parsers.common import (
     load_previous_function_cache,
@@ -326,3 +328,183 @@ class TestSummarizeAiResult:
     def test_failed(self):
         status, preview = summarize_ai_result(AI_FAILED)
         assert status == "failed"
+
+
+class TestAnalyzePointerDirections:
+    """Tests for _analyze_pointer_directions — detects in/out/in out
+    for pointer parameters by analyzing body dereferences."""
+
+    def _get_dirs(self, code, param_names):
+        """Parse C code, find the first compound_statement, and run analysis."""
+        root = parse_c_code(code)
+
+        def find_body(node):
+            if node.type == "compound_statement":
+                return node
+            for child in node.children:
+                result = find_body(child)
+                if result:
+                    return result
+            return None
+
+        body = find_body(root)
+        assert body is not None, "No compound_statement found in test code"
+        return _analyze_pointer_directions(body, set(param_names))
+
+    def test_read_only_pointer_is_in(self):
+        code = """
+        void foo(int* p) {
+            int x = *p + 1;
+        }
+        """
+        dirs = self._get_dirs(code, ["p"])
+        assert dirs["p"] == "in"
+
+    def test_write_only_pointer_is_out(self):
+        code = """
+        void foo(int* p) {
+            *p = 42;
+        }
+        """
+        dirs = self._get_dirs(code, ["p"])
+        assert dirs["p"] == "out"
+
+    def test_compound_assign_is_out(self):
+        code = """
+        void foo(int* p) {
+            *p += 5;
+        }
+        """
+        dirs = self._get_dirs(code, ["p"])
+        assert dirs["p"] == "out"
+
+    def test_read_and_write_is_in_out(self):
+        code = """
+        void foo(int* p) {
+            int x = *p;
+            *p = x + 1;
+        }
+        """
+        dirs = self._get_dirs(code, ["p"])
+        assert dirs["p"] == "in out"
+
+    def test_mixed_read_and_compound_write_is_in_out(self):
+        code = """
+        void foo(int* p) {
+            int x = *p + 3;
+            *p += 4;
+        }
+        """
+        dirs = self._get_dirs(code, ["p"])
+        assert dirs["p"] == "in out"
+
+    def test_increment_decrement_is_in_out(self):
+        code = """
+        void foo(int* p) {
+            ++*p;
+        }
+        """
+        dirs = self._get_dirs(code, ["p"])
+        assert dirs["p"] == "in out"
+
+    def test_multiple_pointer_params(self):
+        code = """
+        void hello(int* input, int* output, int* mixed) {
+            int temp = *input + 3 + *mixed;
+            *output += 2;
+            *mixed += 4;
+        }
+        """
+        dirs = self._get_dirs(code, ["input", "output", "mixed"])
+        assert dirs["input"] == "in"
+        assert dirs["output"] == "out"
+        assert dirs["mixed"] == "in out"
+
+    def test_non_pointer_params_are_ignored(self):
+        """Only pointer params are analyzed; non-pointers never appear."""
+        dirs = _analyze_pointer_directions(
+            parse_c_code("int add(int a, int b) { return a + b; }"),
+            set(),
+        )
+        assert dirs == {}
+
+    def test_empty_body(self):
+        dirs = _analyze_pointer_directions(None, {"p"})
+        assert dirs["p"] == "in"
+
+
+_EMPTY_LOOKUP = {"external": {}, "static": {}}
+
+
+class TestExtractFunctionsFromCFile:
+    """Tests for extract_functions_from_c_file — the main per-file extraction."""
+
+    def test_finds_function_inside_ifdef(self, tmp_dir):
+        """Regression: functions inside #ifdef should not be skipped."""
+        code = """
+        #ifdef XYZ
+        void guarded_func(void) {
+        }
+        #endif
+        """
+        path = os.path.join(tmp_dir, "test_ifdef.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        names = [f["name"] for f in funcs]
+        assert "guarded_func" in names, f"Function inside #ifdef not found, got: {names}"
+
+    def test_finds_function_inside_if(self, tmp_dir):
+        """Regression: functions inside #if should not be skipped."""
+        code = """
+        #if 1
+        void enabled_func(void) { }
+        #endif
+        """
+        path = os.path.join(tmp_dir, "test_if.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        names = [f["name"] for f in funcs]
+        assert "enabled_func" in names, f"Function inside #if not found, got: {names}"
+
+    def test_pointer_direction_in_output(self, tmp_dir):
+        """End-to-end: pointer param directions are set in extracted functions."""
+        code = """
+        void process(int* in_only, int* out_only, int* in_out) {
+            int x = *in_only + *in_out;
+            *out_only = 42;
+            *in_out += 1;
+        }
+        """
+        path = os.path.join(tmp_dir, "test_dirs.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        assert len(funcs) == 1
+        f = funcs[0]
+        dirs = {inp["name"]: inp["direction"] for inp in f["inputs"]}
+        assert dirs["in_only"] == "in"
+        assert dirs["out_only"] == "out"
+        assert dirs["in_out"] == "in out"
+
+    def test_pointer_type_includes_star(self, tmp_dir):
+        """Regression: pointer types should include '*', e.g. 'int*' not 'int'."""
+        code = "void foo(int* p) { *p = 0; }"
+        path = os.path.join(tmp_dir, "test_type.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        assert len(funcs) == 1
+        types = {inp["name"]: inp["type"] for inp in funcs[0]["inputs"]}
+        assert "*" in types["p"], f"Expected pointer type with '*', got: {types['p']}"
+
+    def test_finds_top_level_function(self, tmp_dir):
+        """Non-preprocessor-guarded functions are still found."""
+        code = "void normal(void) { }"
+        path = os.path.join(tmp_dir, "test_normal.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        names = [f["name"] for f in funcs]
+        assert "normal" in names
