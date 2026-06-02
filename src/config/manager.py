@@ -41,6 +41,21 @@ OPTIONAL_CONFIG_TYPES = {
 REQUIRED_KEYS = tuple(CONFIG_JSON_MAP.keys())
 APP_DIR_NAME = "aoto-md"
 
+
+def _get_app_dir():
+    system_name = platform.system()
+    home = Path.home()
+    if system_name == "Windows":
+        base_dir = Path(os.getenv("APPDATA", home / "AppData" / "Roaming"))
+    elif system_name == "Darwin":
+        base_dir = home / "Library" / "Application Support"
+    else:
+        base_dir = Path(os.getenv("XDG_CONFIG_HOME", home / ".config"))
+    return base_dir / APP_DIR_NAME
+
+
+STATE_DIR = str(_get_app_dir())
+
 ANSI_RESET = "\033[0m"
 ANSI_STYLES = {
     "accent": "\033[96m",
@@ -68,17 +83,7 @@ def _print_status(label, message, tone="accent"):
 
 
 def get_config_path():
-    system_name = platform.system()
-    home = Path.home()
-
-    if system_name == "Windows":
-        base_dir = Path(os.getenv("APPDATA", home / "AppData" / "Roaming"))
-    elif system_name == "Darwin":
-        base_dir = home / "Library" / "Application Support"
-    else:
-        base_dir = Path(os.getenv("XDG_CONFIG_HOME", home / ".config"))
-
-    return base_dir / APP_DIR_NAME / "config.json"
+    return _get_app_dir() / "config.json"
 
 
 def _read_json_file(file_path):

@@ -3,11 +3,37 @@
 import argparse
 import logging
 import os
+import shutil
 import sys
-from config.manager import ensure_ai_config_interactive, rerun_ai_config_interactive, set_config_value
+from config.manager import (
+    ensure_ai_config_interactive,
+    rerun_ai_config_interactive,
+    set_config_value,
+    STATE_DIR,
+)
 from parsers import detect_language
 from pipeline import run_extract_phase, run_docgen_phase
 from core.utils import get_default_cache_dir
+
+
+def _last_cache_file():
+    return os.path.join(STATE_DIR, "last_cache_dir")
+
+
+def _read_last_cache_dir():
+    path = _last_cache_file()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except (FileNotFoundError, OSError):
+        return None
+
+
+def _save_last_cache_dir(cache_dir):
+    path = _last_cache_file()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(str(cache_dir))
 
 
 def configure_logging(verbose=False):
@@ -155,6 +181,25 @@ def build_parser(default_cache_dir):
         help="Config value to set",
     )
 
+    clear_examples = """Examples:
+    python -m cli clear-cache
+    python -m cli clear-cache --cache_dir .analysis
+"""
+
+    clear_parser = subparsers.add_parser(
+        "clear-cache",
+        aliases=["clear"],
+        help="Remove all cached analysis data",
+        description="Clear all content in the cache directory.",
+        epilog=clear_examples,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    clear_parser.add_argument(
+        "--cache_dir",
+        default=None,
+        help="Cache directory to clear (default: last used, or platform cache dir)",
+    )
+
     return parser
 
 
@@ -175,6 +220,26 @@ def main():
                 sys.exit(1)
         else:
             rerun_ai_config_interactive()
+        return
+
+    if cli_args.command in ("clear-cache", "clear"):
+        # Use explicit --cache_dir, or last-used cache, or system default
+        cache_dir = cli_args.cache_dir or _read_last_cache_dir() or default_cache_dir
+        if os.path.isdir(cache_dir):
+            count = 0
+            for entry in os.listdir(cache_dir):
+                path = os.path.join(cache_dir, entry)
+                try:
+                    if os.path.isfile(path) or os.path.islink(path):
+                        os.unlink(path)
+                    else:
+                        shutil.rmtree(path)
+                    count += 1
+                except OSError as exc:
+                    print(f"Warning: could not remove {path}: {exc}", file=sys.stderr)
+            print(f"Cleared {count} item(s) from {cache_dir}")
+        else:
+            print(f"Cache directory does not exist: {cache_dir}")
         return
 
     analyse_dirs = cli_args.analyse_dir or [cli_args.root_dir]
@@ -211,6 +276,9 @@ def main():
         language=cli_args.lang,
     )
     run_docgen_phase(docgen_args)
+
+    # Remember the cache dir so clear-cache can find it later
+    _save_last_cache_dir(cli_args.cache_dir)
 
 
 if __name__ == "__main__":
