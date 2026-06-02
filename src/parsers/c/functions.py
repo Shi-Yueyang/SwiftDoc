@@ -115,17 +115,26 @@ def get_type_ref(type_str, type_refs):
 
 # 分辨全局变量数据方向
 def is_identifier_written(node):
-    parent = node.parent
+    """Check if an identifier is being written to.
+
+    Walks up through subscript (arr[0]), field (s->x), and pointer (*p)
+    access chains to find the enclosing assignment or update expression.
+    """
+    # Walk up through access chains to find the actual expression root
+    expr = node
+    _ACCESS_TYPES = ("subscript_expression", "field_expression", "pointer_expression")
+    while expr.parent is not None and expr.parent.type in _ACCESS_TYPES:
+        expr = expr.parent
+
+    parent = expr.parent
     if parent is None:
         return False
     if parent.type == "assignment_expression":
         left = parent.child_by_field_name("left")
-        if left and find_identifier(left) == node:
+        if left is not None and left.start_byte == expr.start_byte:
             return True
     if parent.type == "update_expression":
-        operand = parent.child_by_field_name("argument")
-        if operand and find_identifier(operand) == node:
-            return True
+        return True
     return False
 
 
@@ -375,7 +384,12 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                 for gname in global_read | global_written:
                     ginfo = referenced_globals[gname]
                     gtype = ginfo["type"]
-                    direction = "in out" if gname in global_written else "in"
+                    if gname in global_read and gname in global_written:
+                        direction = "in out"
+                    elif gname in global_written:
+                        direction = "out"
+                    else:
+                        direction = "in"
                     type_ref = get_type_ref(gtype, type_refs)
                     if type_ref is None:
                         type_ref = ""
