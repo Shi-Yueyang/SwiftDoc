@@ -139,3 +139,18 @@ class TestGenerateFunctionGraphs:
         img_path = os.path.join(output_dir, f"{sample_functions[0]['name']}.png")
         size = os.path.getsize(img_path)
         assert size > 100  # image should have some content
+
+    def test_plain_style_generates_images(self, sample_functions, tmp_path):
+        output_dir = str(tmp_path / "plain_graph_output")
+        generate_function_graphs(function_list=sample_functions, output_dir=output_dir, style="plain")
+        assert os.path.isdir(output_dir)
+        for func in sample_functions:
+            img_path = os.path.join(output_dir, f"{func['name']}.png")
+            assert os.path.exists(img_path), f"Missing image for {func['name']} with plain style"
+
+    def test_plain_style_image_is_non_empty(self, sample_functions, tmp_path):
+        output_dir = str(tmp_path / "plain_non_empty_test")
+        generate_function_graphs(function_list=sample_functions[:1], output_dir=output_dir, style="plain")
+        img_path = os.path.join(output_dir, f"{sample_functions[0]['name']}.png")
+        size = os.path.getsize(img_path)
+        assert size > 100

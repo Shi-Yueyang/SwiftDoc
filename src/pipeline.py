@@ -139,7 +139,8 @@ def run_docgen_phase(args):
                     used_type_names.add(word)
 
     figures_dir = os.path.join(output_folder, "figures")
-    generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir)
+    graph_style = getattr(args, "style", "plain")
+    generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir, style=graph_style)
 
     generator.generate_functions(
         functions_json=None,

@@ -122,6 +122,12 @@ def build_parser(default_cache_dir):
         default="function",
         help="Generate one .md per function or per source file (default: function)",
     )
+    generate_parser.add_argument(
+        "--style",
+        choices=["modern", "plain"],
+        default="plain",
+        help="Graph plotting style (default: plain)",
+    )
 
     config_examples = """Examples:
     python -m cli config
@@ -201,6 +207,7 @@ def main():
         output_folder=cli_args.output_folder,
         format=getattr(cli_args, "format", "markdown"),
         group_by=getattr(cli_args, "group_by", "function"),
+        style=getattr(cli_args, "style", "plain"),
         language=cli_args.lang,
     )
     run_docgen_phase(docgen_args)
