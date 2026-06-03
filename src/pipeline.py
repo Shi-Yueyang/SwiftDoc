@@ -59,26 +59,30 @@ def run_extract_phase(args):
     logger.info("Found %s global variables", len(global_vars))
 
     # --- Types ---
+    ignore_types = getattr(args, "ignore_types", None)
     types_data = parser.extract_types(
         project_root,
         args.cache_dir,
         enable_ai=enable_ai,
+        ignore_types=ignore_types,
     )
 
     # --- Functions ---
+    ignore_calls = getattr(args, "ignore_calls", None)
     parser.extract_functions(
         project_root,
         output_json_path=analysis_paths["functions"],
         types_data=types_data,
         global_vars=global_vars,
         enable_ai=enable_ai,
+        ignore_calls=ignore_calls,
     )
 
     logger.info(colorize_extract_phase_message("Analysis completed.", EXTRACT_PHASE_DONE_COLOR))
 
 
 def run_docgen_phase(args):
-    output_format = getattr(args, "format", "markdown")
+    output_format = getattr(args, "format", "docx")
     generator = get_generator(output_format)
 
     logger.info(colorize_extract_phase_message("Generating docs...", EXTRACT_PHASE_START_COLOR))
@@ -148,7 +152,7 @@ def run_docgen_phase(args):
         types_json=types_json,
         figures_dir=figures_dir,
         output_dir=output_folder,
-        group_by=getattr(args, "group_by", "function"),
+        group_by=getattr(args, "group_by", "file"),
     )
 
     appendix_ext = get_format_extension(output_format)

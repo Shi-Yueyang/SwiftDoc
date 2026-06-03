@@ -82,7 +82,8 @@ class TestBuildParser:
         ns = p.parse_args(["generate", "/some/project"])
         assert ns.command == "generate"
         assert ns.root_dir == "/some/project"
-        assert ns.lang == "auto"  # default
+        # argparse.SUPPRESS — attributes only exist when explicitly passed
+        assert not hasattr(ns, "lang")
 
     def test_parser_has_config_subcommand(self):
         p = build_parser("/tmp/cache")
@@ -100,11 +101,12 @@ class TestBuildParser:
     def test_generate_defaults(self):
         p = build_parser("/tmp/cache")
         ns = p.parse_args(["generate", "/proj"])
-        assert ns.lang == "auto"
-        assert ns.ai == "off"
-        assert ns.cache_dir == "/tmp/cache"
-        assert ns.output_folder == "out"
-        assert ns.analyse_dir is None
+        # argparse.SUPPRESS — unset attributes are absent
+        assert not hasattr(ns, "lang")
+        assert not hasattr(ns, "ai")
+        assert not hasattr(ns, "cache_dir")
+        assert not hasattr(ns, "output_folder")
+        assert not hasattr(ns, "analyse_dir")
 
     def test_generate_with_ai_on(self):
         p = build_parser("/tmp/cache")
@@ -126,10 +128,20 @@ class TestBuildParser:
         ns = p.parse_args(["--verbose", "generate", "/proj"])
         assert ns.verbose is True
 
+    def test_ignore_calls_flag(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["generate", "/proj", "--ignore-calls", "free", "--ignore-calls", "malloc"])
+        assert ns.ignore_calls == ["free", "malloc"]
+
+    def test_ignore_types_flag(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["generate", "/proj", "--ignore-types", "noisy_t"])
+        assert ns.ignore_types == ["noisy_t"]
+
 
 class TestMain:
     def test_config_set_key_value(self, tmp_path, monkeypatch, capsys):
-        config_path = tmp_path / "aoto-md" / "config.json"
+        config_path = tmp_path / "swift-doc" / "config.json"
         monkeypatch.setattr("cli.set_config_value", lambda k, v, **kw: str(config_path))
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
         monkeypatch.setattr("sys.argv", ["cli.py", "config", "temperature", "0.7"])

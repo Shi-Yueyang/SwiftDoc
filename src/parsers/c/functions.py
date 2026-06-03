@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 C_LANGUAGE = Language(tree_sitter_c.language())
 parser = Parser(C_LANGUAGE)
 
+# Standard library functions to exclude from call graphs
+_IGNORED_CALLS = {"memcpy", "memset"}
+
 
 # 提取形参
 def find_parameters(declarator_node):
@@ -298,7 +301,8 @@ def _extract_return_type(func_node):
     return return_type
 
 
-def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
+def extract_functions_from_c_file(c_file_path, type_refs, global_lookup,
+                                  extra_ignore_calls=None):
     """
     Parse a single .c file and return a list of information for all functions in the file.
     Each element is a dictionary containing:
@@ -406,6 +410,8 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
             return_type = _extract_return_type(node)
             return_exprs = find_return_statements(body_node)
             calls = extract_calls_from_body(body_node)
+            ignored = _IGNORED_CALLS | set(extra_ignore_calls or [])
+            calls = [c for c in calls if c not in ignored]
 
             functions.append(
                 {
@@ -426,7 +432,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
 
 
 # 分析c文件
-def scan_all_functions(project_dir, types_data, global_vars):
+def scan_all_functions(project_dir, types_data, global_vars, ignore_calls=None):
     """Scan .c files and return a list of function dicts (no cache I/O)."""
     c_files = collect_source_files(project_dir, (".c",))
     if not c_files:
@@ -437,7 +443,8 @@ def scan_all_functions(project_dir, types_data, global_vars):
     global_lookup = build_global_lookup(global_vars)
     all_functions = []
     for cf in c_files:
-        funcs = extract_functions_from_c_file(cf, type_refs, global_lookup)
+        funcs = extract_functions_from_c_file(cf, type_refs, global_lookup,
+                                              extra_ignore_calls=ignore_calls)
         all_functions.extend(funcs)
 
     # Resolve called_by

@@ -22,11 +22,11 @@ def get_default_cache_dir():
     """Get the default cache directory path for the current platform."""
     home = Path.home()
     if platform.system() == "Windows":
-        return Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local")) / "aoto-md" / "Cache"
+        return Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local")) / "swift-doc" / "Cache"
     elif platform.system() == "Darwin":  # macOS
-        return home / "Library" / "Caches" / "aoto-md"
+        return home / "Library" / "Caches" / "swift-doc"
     else:  # Linux and others
-        return Path(os.environ.get("XDG_CACHE_HOME", home / ".cache")) / "aoto-md"
+        return Path(os.environ.get("XDG_CACHE_HOME", home / ".cache")) / "swift-doc"
 
 
 ANSI_RESET = "\033[0m"

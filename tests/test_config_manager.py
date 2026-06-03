@@ -30,9 +30,9 @@ class TestGetConfigPath:
         path = get_config_path()
         assert path is not None
 
-    def test_path_contains_aoto_md(self):
+    def test_path_contains_swift_doc(self):
         path = get_config_path()
-        assert "aoto-md" in str(path) or "aoto-md" == path.parent.name
+        assert "swift-doc" in str(path) or "swift-doc" == path.parent.name
 
     def test_path_ends_with_config_json(self):
         path = get_config_path()
@@ -228,7 +228,7 @@ class TestResolveAiConfig:
 
 class TestSaveUserConfig:
     def test_saves_to_path(self, tmp_path):
-        config_path = tmp_path / "aoto-md" / "config.json"
+        config_path = tmp_path / "swift-doc" / "config.json"
         config = {"api_key": "sk-test", "base_url": "https://api.test.com", "model_name": "test-model"}
         saved_path = save_user_config(config, config_path)
         assert saved_path == config_path
@@ -238,7 +238,7 @@ class TestSaveUserConfig:
         assert data["api_key"] == "sk-test"
 
     def test_preserves_existing_optional_keys(self, tmp_path):
-        config_path = tmp_path / "aoto-md" / "config.json"
+        config_path = tmp_path / "swift-doc" / "config.json"
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text('{"api_key": "old", "base_url": "u", "model_name": "m", "temperature": 0.9}')
         config = {"api_key": "new", "base_url": "u", "model_name": "m"}

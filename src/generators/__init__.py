@@ -1,5 +1,5 @@
 """
-Generator registry for auto-md.
+Generator registry for swift-doc.
 
 Add new output formats by creating a package (e.g., generators/html/) and registering it here.
 A generator package must export:

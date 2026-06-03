@@ -11,9 +11,21 @@ from config.manager import (
     set_config_value,
     STATE_DIR,
 )
+from config.toml_config import load_toml, find_config
 from parsers import detect_language
 from pipeline import run_extract_phase, run_docgen_phase
 from core.utils import get_default_cache_dir
+
+
+# -- built-in defaults for generate params (used when neither CLI nor TOML sets them) --
+_DEFAULTS = {
+    "lang": "auto",
+    "output_folder": "out",
+    "format": "docx",
+    "group_by": "file",
+    "style": "plain",
+    "ai": "off",
+}
 
 
 def _last_cache_file():
@@ -34,6 +46,63 @@ def _save_last_cache_dir(cache_dir):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(str(cache_dir))
+
+
+def _resolve_config_and_root(cli_args):
+    """Figure out config source and root_dir from CLI args.
+
+    Returns (root_dir: str, toml_config: dict | None).
+    Exits with an error message if nothing can be resolved.
+    """
+    positional = getattr(cli_args, "root_dir", None)
+    toml_config = None
+
+    if positional and positional.endswith(".toml"):
+        # Explicit TOML config file
+        if not os.path.isfile(positional):
+            print(f"Error: config file not found: {positional}", file=sys.stderr)
+            sys.exit(1)
+        toml_config = load_toml(positional)
+        root_dir = toml_config.get("root_dir")
+        if not root_dir:
+            print("Error: root_dir is required in TOML config", file=sys.stderr)
+            sys.exit(1)
+    elif positional:
+        # Directory — look for swift-doc.toml inside
+        if not os.path.isdir(positional):
+            print(f"Error: directory not found: {positional}", file=sys.stderr)
+            sys.exit(1)
+        root_dir = positional
+        config_path = find_config(root_dir)
+        if config_path:
+            toml_config = load_toml(config_path)
+    else:
+        # No positional — look for swift-doc.toml in CWD
+        config_path = find_config(os.getcwd())
+        if config_path:
+            toml_config = load_toml(config_path)
+            root_dir = toml_config.get("root_dir")
+            if not root_dir:
+                print("Error: root_dir is required in TOML config", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print("Error: no project directory or config specified.", file=sys.stderr)
+            print("Usage: swift-doc generate <project_dir | config.toml>", file=sys.stderr)
+            sys.exit(1)
+
+    return root_dir, toml_config
+
+
+def _resolve(key, cli_args, toml_config, default):
+    """Resolve a single config value: CLI > TOML > built-in default."""
+    cli_val = getattr(cli_args, key, None)
+    if cli_val is not None:
+        return cli_val
+    if toml_config:
+        tv = toml_config.get(key)
+        if tv is not None:
+            return tv
+    return default
 
 
 def configure_logging(verbose=False):
@@ -93,66 +162,81 @@ def build_parser(default_cache_dir):
     generate_examples = """Examples:
     python -m cli generate examples/c
     python -m cli generate examples/c --lang c
+    python -m cli generate config.toml
     python -m cli generate examples/c --ai off
     python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
     python -m cli generate examples/c --group-by file --format markdown
+    python -m cli generate examples/c --ignore-calls free --ignore-calls malloc
 """
 
     generate_parser = subparsers.add_parser(
         "generate",
-        help="Extract project data and generate markdown documentation",
+        help="Extract project data and generate documentation",
         epilog=generate_examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     generate_parser.add_argument(
-        "--lang",
-        default="auto",
-        help="Source language for parsing (auto-detected if not specified, default: auto)",
+        "root_dir",
+        nargs="?",
+        default=argparse.SUPPRESS,
+        help="Project root directory or path to a TOML config file",
     )
     generate_parser.add_argument(
-        "root_dir",
-        help="Project root directory for the extract phase",
+        "--lang",
+        default=argparse.SUPPRESS,
+        help="Source language for parsing (auto-detected if not specified, default: auto)",
     )
     generate_parser.add_argument(
         "--analyse_dir",
         action="append",
-        default=None,
+        default=argparse.SUPPRESS,
         help="Subset of root_dir to generate docs for (repeatable, defaults to root_dir)",
     )
     generate_parser.add_argument(
         "--cache_dir",
-        default=default_cache_dir,
+        default=argparse.SUPPRESS,
         help="Cache directory for intermediate JSON files",
     )
     generate_parser.add_argument(
         "--output_folder",
-        default="out",
-        help="Output directory for markdown and figures",
+        default=argparse.SUPPRESS,
+        help="Output directory for markdown and figures (default: out)",
     )
     generate_parser.add_argument(
         "--ai",
         choices=["on", "off"],
-        default="off",
-        help="Enable AI for type/function analysis and interactive onboarding when config is missing",
+        default=argparse.SUPPRESS,
+        help="Enable AI for type/function analysis (default: off)",
     )
     generate_parser.add_argument(
         "--format",
         choices=["markdown", "docx"],
-        default="markdown",
-        help="Output documentation format (default: markdown)",
+        default=argparse.SUPPRESS,
+        help="Output documentation format (default: docx)",
     )
     generate_parser.add_argument(
         "--group-by",
         choices=["function", "file"],
-        default="function",
-        help="Generate one .md per function or per source file (default: function)",
+        default=argparse.SUPPRESS,
+        help="Generate one doc per function or per source file (default: file)",
     )
     generate_parser.add_argument(
         "--style",
         choices=["modern", "plain"],
-        default="plain",
+        default=argparse.SUPPRESS,
         help="Graph plotting style (default: plain)",
+    )
+    generate_parser.add_argument(
+        "--ignore-calls",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Function names to exclude from call graphs (repeatable)",
+    )
+    generate_parser.add_argument(
+        "--ignore-types",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Type names to exclude from extraction (repeatable)",
     )
 
     config_examples = """Examples:
@@ -223,8 +307,7 @@ def main():
         return
 
     if cli_args.command in ("clear-cache", "clear"):
-        # Use explicit --cache_dir, or last-used cache, or system default
-        cache_dir = cli_args.cache_dir or _read_last_cache_dir() or default_cache_dir
+        cache_dir = getattr(cli_args, "cache_dir", None) or _read_last_cache_dir() or default_cache_dir
         if os.path.isdir(cache_dir):
             count = 0
             for entry in os.listdir(cache_dir):
@@ -242,43 +325,73 @@ def main():
             print(f"Cache directory does not exist: {cache_dir}")
         return
 
-    analyse_dirs = cli_args.analyse_dir or [cli_args.root_dir]
-
-    try:
-        validate_paths(cli_args.root_dir, analyse_dirs)
-    except ValueError as exc:
-        parser.error(str(exc))
-
     if cli_args.command == "generate":
-        if cli_args.ai == "on":
+        # -- resolve config source and root_dir --
+        root_dir, toml_config = _resolve_config_and_root(cli_args)
+
+        # -- merge: CLI > TOML > defaults --
+        lang = _resolve("lang", cli_args, toml_config, _DEFAULTS["lang"])
+        output_folder = _resolve("output_folder", cli_args, toml_config, _DEFAULTS["output_folder"])
+        cache_dir = _resolve("cache_dir", cli_args, toml_config, default_cache_dir)
+        fmt = _resolve("format", cli_args, toml_config, _DEFAULTS["format"])
+        group_by = _resolve("group_by", cli_args, toml_config, _DEFAULTS["group_by"])
+        style = _resolve("style", cli_args, toml_config, _DEFAULTS["style"])
+        ai = _resolve("ai", cli_args, toml_config, _DEFAULTS["ai"])
+
+        # analyse_dirs: CLI list > TOML list > [root_dir]
+        cli_analyse = getattr(cli_args, "analyse_dir", None)
+        toml_analyse = toml_config.get("analyse_dirs") if toml_config else None
+        analyse_dirs = cli_analyse or toml_analyse or [root_dir]
+
+        # ignore sets: CLI list > TOML list
+        cli_ignore_calls = getattr(cli_args, "ignore_calls", None)
+        toml_ignore_calls = toml_config.get("ignore_calls") if toml_config else None
+        ignore_calls = set(cli_ignore_calls or toml_ignore_calls or [])
+
+        cli_ignore_types = getattr(cli_args, "ignore_types", None)
+        toml_ignore_types = toml_config.get("ignore_types") if toml_config else None
+        ignore_types = set(cli_ignore_types or toml_ignore_types or [])
+
+        # -- validate --
+        try:
+            validate_paths(root_dir, analyse_dirs)
+        except ValueError as exc:
+            parser.error(str(exc))
+
+        # -- AI onboarding if needed --
+        if ai == "on":
             ensure_ai_config_interactive()
 
-        if cli_args.lang == "auto":
-            cli_args.lang = detect_language(cli_args.root_dir)
+        # -- language detection --
+        if lang == "auto":
+            lang = detect_language(root_dir)
 
+        # -- extract phase --
         extract_args = argparse.Namespace(
-            root_dir=cli_args.root_dir,
-            cache_dir=cli_args.cache_dir,
-            ai=cli_args.ai,
-            language=cli_args.lang,
+            root_dir=root_dir,
+            cache_dir=cache_dir,
+            ai=ai,
+            language=lang,
+            ignore_calls=ignore_calls,
+            ignore_types=ignore_types,
         )
         run_extract_phase(extract_args)
 
-    # Document generation phase
-    docgen_args = argparse.Namespace(
-        root_dir=cli_args.root_dir,
-        analyse_dirs=analyse_dirs,
-        cache_dir=cli_args.cache_dir,
-        output_folder=cli_args.output_folder,
-        format=getattr(cli_args, "format", "markdown"),
-        group_by=getattr(cli_args, "group_by", "function"),
-        style=getattr(cli_args, "style", "plain"),
-        language=cli_args.lang,
-    )
-    run_docgen_phase(docgen_args)
+        # -- docgen phase --
+        docgen_args = argparse.Namespace(
+            root_dir=root_dir,
+            analyse_dirs=analyse_dirs,
+            cache_dir=cache_dir,
+            output_folder=output_folder,
+            format=fmt,
+            group_by=group_by,
+            style=style,
+            language=lang,
+        )
+        run_docgen_phase(docgen_args)
 
-    # Remember the cache dir so clear-cache can find it later
-    _save_last_cache_dir(cli_args.cache_dir)
+        # -- remember cache dir for clear-cache --
+        _save_last_cache_dir(cache_dir)
 
 
 if __name__ == "__main__":

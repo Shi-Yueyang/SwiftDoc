@@ -1,4 +1,4 @@
-"""Parser registry for auto-md.
+"""Parser registry for swift-doc.
 
 Add new languages by subclassing parsers.base.BaseParser and registering here.
 Each parser instance provides:

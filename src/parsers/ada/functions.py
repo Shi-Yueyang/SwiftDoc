@@ -357,7 +357,7 @@ def extract_subprograms_from_file(file_path, type_refs, global_lookup):
     return functions
 
 
-def scan_all_functions(project_dir, types_data, global_vars):
+def scan_all_functions(project_dir, types_data, global_vars, ignore_calls=None):
     """Scan .adb files and return a list of function dicts (no cache I/O)."""
     adb_files = collect_source_files(project_dir, (".adb",))
     if not adb_files:
@@ -367,6 +367,7 @@ def scan_all_functions(project_dir, types_data, global_vars):
     type_refs = types_data.get("type_references", {})
     global_lookup = build_global_lookup(global_vars)
     all_functions = []
+    ignored = set(ignore_calls or [])
 
     for f in adb_files:
         funcs = extract_subprograms_from_file(f, type_refs, global_lookup)
@@ -376,8 +377,10 @@ def scan_all_functions(project_dir, types_data, global_vars):
     known_names = {f["name"] for f in all_functions}
 
     # Filter false positives from bare selected_component calls (field accesses)
+    # and explicitly ignored calls
     for func in all_functions:
-        func["calls"] = [c for c in func.get("calls", []) if c in known_names]
+        func["calls"] = [c for c in func.get("calls", [])
+                         if c in known_names and c not in ignored]
 
     called_by_map = {}
     for func in all_functions:

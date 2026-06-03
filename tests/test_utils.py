@@ -21,9 +21,9 @@ class TestGetDefaultCacheDir:
         path = get_default_cache_dir()
         assert path is not None
 
-    def test_path_contains_aoto_md(self):
+    def test_path_contains_swift_doc(self):
         path = get_default_cache_dir()
-        assert "aoto-md" in str(path)
+        assert "swift-doc" in str(path)
 
     @patch("platform.system", return_value="Windows")
     def test_windows_path(self, mock_system):

@@ -39,7 +39,7 @@ OPTIONAL_CONFIG_TYPES = {
 }
 
 REQUIRED_KEYS = tuple(CONFIG_JSON_MAP.keys())
-APP_DIR_NAME = "aoto-md"
+APP_DIR_NAME = "swift-doc"
 
 
 def _get_app_dir():

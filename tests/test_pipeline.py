@@ -133,6 +133,8 @@ class TestRunDocgenPhase:
             analyse_dirs=[sample_c_project],
             cache_dir=cache_dir,
             output_folder=output_folder,
+            format="markdown",
+            group_by="function",
         )
         run_docgen_phase(args)
 

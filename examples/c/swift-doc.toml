@@ -1,0 +1,29 @@
+# swift-doc.toml — example config for the C example project
+#
+# Run with:
+#   swift-doc generate examples/c
+#   swift-doc generate examples/c/swift-doc.toml
+
+root_dir = "examples/c"
+
+# --- Output options ---
+lang = "c"                  # "auto" | "c" | "ada"
+output_folder = "out"       # where generated docs land
+format = "docx"             # "docx" | "markdown"
+group_by = "file"           # "file" | "function"
+style = "plain"             # "plain" | "modern"
+
+# --- Extraction options ---
+ai = "off"                  # "off" | "on"
+# cache_dir = ".analysis"   # uncomment to override the platform default
+# analyse_dirs = [          # uncomment to scope docs to specific files/dirs
+#     "examples/c/bsw",
+#     "examples/c/drivers",
+# ]
+
+# --- Ignore lists ---
+[ignore]
+# Function calls to exclude from call graphs (memcpy & memset are always ignored)
+calls = ["spi_cs_assert", "spi_cs_deassert"]
+# Type names to skip during global type extraction
+types = []
