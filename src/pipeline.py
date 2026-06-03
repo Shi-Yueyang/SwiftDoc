@@ -59,23 +59,19 @@ def run_extract_phase(args):
     logger.info("Found %s global variables", len(global_vars))
 
     # --- Types ---
-    ignore_types = getattr(args, "ignore_types", None)
     types_data = parser.extract_types(
         project_root,
         args.cache_dir,
         enable_ai=enable_ai,
-        ignore_types=ignore_types,
     )
 
     # --- Functions ---
-    ignore_calls = getattr(args, "ignore_calls", None)
     parser.extract_functions(
         project_root,
         output_json_path=analysis_paths["functions"],
         types_data=types_data,
         global_vars=global_vars,
         enable_ai=enable_ai,
-        ignore_calls=ignore_calls,
     )
 
     logger.info(colorize_extract_phase_message("Analysis completed.", EXTRACT_PHASE_DONE_COLOR))
@@ -108,6 +104,15 @@ def run_docgen_phase(args):
             types_data = json.load(f)
     type_refs = types_data.get("type_references", {})
 
+    # Apply type filtering (docgen-time — cache stays unfiltered)
+    ignore_types = getattr(args, "ignore_types", None)
+    if ignore_types:
+        ignored_t = set(ignore_types)
+        type_defs = types_data.get("type_definitions", {})
+        for tname in ignored_t:
+            type_defs.pop(tname, None)
+            type_refs.pop(tname, None)
+
     if not os.path.exists(functions_json):
         logger.warning("Functions cache file not found: %s", functions_json)
         all_functions = []
@@ -130,6 +135,24 @@ def run_docgen_phase(args):
     if not selected_funcs:
         logger.warning("No functions found under %s", analyse_dirs)
         return
+
+    # Apply call filtering (docgen-time — cache stays unfiltered)
+    ignore_calls = getattr(args, "ignore_calls", None)
+    if ignore_calls:
+        ignored_c = set(ignore_calls)
+        for func in selected_funcs:
+            func["calls"] = [c for c in func.get("calls", []) if c not in ignored_c]
+
+    # Scrub type_refs for global-variable inputs whose type is ignored
+    ignore_types = getattr(args, "ignore_types", None)
+    if ignore_types:
+        ignored_t = set(ignore_types)
+        for func in selected_funcs:
+            for inp in func.get("inputs", []):
+                if inp.get("kind") == "Global variable":
+                    base = inp["type"].split()[-1].rstrip("*")
+                    if base in ignored_t:
+                        inp["type_ref"] = ""
 
     used_type_names = set()
     for func in selected_funcs:

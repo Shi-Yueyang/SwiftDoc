@@ -24,6 +24,6 @@ ai = "off"                  # "off" | "on"
 # --- Ignore lists ---
 [ignore]
 # Function calls to exclude from call graphs (memcpy & memset are always ignored)
-calls = ["spi_cs_assert", "spi_cs_deassert"]
+calls = []
 # Type names to skip during global type extraction
 types = []

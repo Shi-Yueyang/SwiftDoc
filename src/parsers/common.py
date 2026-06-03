@@ -247,13 +247,8 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
 
 
 def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", enable_ai=True,
-                            language="c", ignore_types=None):
+                            language="c"):
     """Compare fresh types against cache, apply AI enrichment for changes."""
-    # Drop explicitly ignored types before diffing
-    ignored = set(ignore_types or [])
-    if ignored:
-        fresh_types = {k: v for k, v in fresh_types.items() if k not in ignored}
-
     folder_name = build_cache_name(project_dir)
     cache_path = os.path.join(output_dir, f"{folder_name}_global_types.json")
     previous_data, loaded_from = load_previous_type_cache(cache_path)

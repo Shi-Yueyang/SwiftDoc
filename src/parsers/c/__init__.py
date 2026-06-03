@@ -17,12 +17,11 @@ class CParser(BaseParser):
 
     def extract_types(
         self, project_dir: str, cache_dir: str, enable_ai: bool = True,
-        ignore_types: set | None = None,
     ) -> TypesData:
         fresh_types = scan_project_types(project_dir)
         return refresh_type_definitions(
             fresh_types, project_dir, cache_dir, enable_ai=enable_ai,
-            language=self.language, ignore_types=ignore_types,
+            language=self.language,
         )
 
     def extract_functions(
@@ -32,10 +31,8 @@ class CParser(BaseParser):
         types_data: TypesData,
         global_vars: list[GlobalVar],
         enable_ai: bool = True,
-        ignore_calls: set | None = None,
     ) -> list[FuncDef]:
-        all_functions = scan_all_functions(project_dir, types_data, global_vars,
-                                           ignore_calls=ignore_calls)
+        all_functions = scan_all_functions(project_dir, types_data, global_vars)
         refresh_functions(
             all_functions=all_functions,
             output_json_path=output_json_path,

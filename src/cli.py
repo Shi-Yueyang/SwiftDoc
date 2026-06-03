@@ -134,17 +134,21 @@ def validate_paths(root_dir, analyse_dirs):
 def build_parser(default_cache_dir):
     examples = """Examples:
   Generate documentation:
-    python -m cli generate examples/c
-    python -m cli generate examples/c --lang c
-    python -m cli generate examples/c --ai off
-    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    python -m cli generate examples/c --analyse_dir examples/c/comm/sensor.c --cache_dir .analysis --output_folder out_docs --ai on
+    swift-doc generate examples/c
+    swift-doc generate examples/c --lang c --style modern
+    swift-doc generate my-config.toml
+    swift-doc generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    swift-doc generate examples/c --ignore-calls free --ignore-calls malloc
 
   Configure AI:
-    python -m cli config
-    python -m cli config temperature 0.7
-    python -m cli config max_tokens 1500
-    python -m cli config retry_count 3
+    swift-doc config
+    swift-doc config temperature 0.7
+    swift-doc config max_tokens 1500
+    swift-doc config retry_count 3
+
+  Clear cache:
+    swift-doc clear-cache
+    swift-doc clear-cache --cache_dir .analysis
 """
     parser = argparse.ArgumentParser(
         description="Analyze source code, generate documentation, and manage AI configuration",
@@ -160,13 +164,12 @@ def build_parser(default_cache_dir):
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     generate_examples = """Examples:
-    python -m cli generate examples/c
-    python -m cli generate examples/c --lang c
-    python -m cli generate config.toml
-    python -m cli generate examples/c --ai off
-    python -m cli generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    python -m cli generate examples/c --group-by file --format markdown
-    python -m cli generate examples/c --ignore-calls free --ignore-calls malloc
+    swift-doc generate examples/c
+    swift-doc generate examples/c --lang c --style modern
+    swift-doc generate my-config.toml
+    swift-doc generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    swift-doc generate examples/c --group-by file --format markdown
+    swift-doc generate examples/c --ignore-calls free --ignore-calls malloc
 """
 
     generate_parser = subparsers.add_parser(
@@ -240,11 +243,10 @@ def build_parser(default_cache_dir):
     )
 
     config_examples = """Examples:
-    python -m cli config
-    python -m cli --verbose config
-    python -m cli config temperature 0.7
-    python -m cli config max_tokens 1500
-    python -m cli config retry_count 3
+    swift-doc config
+    swift-doc config temperature 0.7
+    swift-doc config max_tokens 1500
+    swift-doc config retry_count 3
     """
 
     config_parser = subparsers.add_parser(
@@ -266,8 +268,8 @@ def build_parser(default_cache_dir):
     )
 
     clear_examples = """Examples:
-    python -m cli clear-cache
-    python -m cli clear-cache --cache_dir .analysis
+    swift-doc clear-cache
+    swift-doc clear-cache --cache_dir .analysis
 """
 
     clear_parser = subparsers.add_parser(
@@ -372,8 +374,6 @@ def main():
             cache_dir=cache_dir,
             ai=ai,
             language=lang,
-            ignore_calls=ignore_calls,
-            ignore_types=ignore_types,
         )
         run_extract_phase(extract_args)
 
@@ -387,6 +387,8 @@ def main():
             group_by=group_by,
             style=style,
             language=lang,
+            ignore_calls=ignore_calls,
+            ignore_types=ignore_types,
         )
         run_docgen_phase(docgen_args)
 
