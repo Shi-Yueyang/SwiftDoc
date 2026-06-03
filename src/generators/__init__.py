@@ -7,11 +7,11 @@ A generator package must export:
     generate_appendix(types_json, output_path, filter_types=None) -> None
 """
 
-import importlib
+from generators import docx, markdown
 
 _GENERATORS = {
-    "markdown": "generators.markdown",
-    "docx": "generators.docx",
+    "markdown": markdown,
+    "docx": docx,
 }
 
 _FORMAT_EXTENSIONS = {
@@ -25,7 +25,7 @@ def get_generator(format="markdown"):
     format = format.lower()
     if format not in _GENERATORS:
         raise ValueError(f"Unsupported format: {format}. Available: {list(_GENERATORS.keys())}")
-    return importlib.import_module(_GENERATORS[format])
+    return _GENERATORS[format]
 
 
 def register_generator(format, module_path):

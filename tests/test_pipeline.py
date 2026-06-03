@@ -242,14 +242,14 @@ class TestIntegrationC:
         assert os.path.exists(paths["functions"])
 
         # Verify cache content
-        with open(paths["functions"]) as f:
+        with open(paths["functions"], encoding="utf-8") as f:
             funcs_data = json.load(f)
         funcs = funcs_data["functions"]
         func_names = {f["name"] for f in funcs}
         assert "main" in func_names
         assert all("name" in f and "file" in f and "calls" in f for f in funcs)
 
-        with open(paths["types"]) as f:
+        with open(paths["types"], encoding="utf-8") as f:
             types_data = json.load(f)
         type_defs = types_data["type_definitions"]
         assert "Point" in type_defs or "Direction" in type_defs or "Status" in type_defs
@@ -268,12 +268,12 @@ class TestIntegrationC:
         assert os.path.exists(os.path.join(out_dir, "appendix.md"))
 
         # Verify appendix contains C syntax, not Ada
-        with open(os.path.join(out_dir, "appendix.md")) as f:
+        with open(os.path.join(out_dir, "appendix.md"), encoding="utf-8") as f:
             appendix = f.read()
         assert "typedef struct" in appendix or "typedef enum" in appendix or "typedef" in appendix
 
         # Verify function doc has expected headings
-        with open(os.path.join(out_dir, "main.md")) as f:
+        with open(os.path.join(out_dir, "main.md"), encoding="utf-8") as f:
             md = f.read()
         assert "function：main" in md
         assert "输入项" in md
@@ -297,7 +297,7 @@ class TestIntegrationC:
 
         # Should have per-file output with correct extension
         assert os.path.exists(os.path.join(out_dir, "main.md"))
-        with open(os.path.join(out_dir, "main.md")) as f:
+        with open(os.path.join(out_dir, "main.md"), encoding="utf-8") as f:
             first_line = f.readline().strip()
         assert first_line == "# main.c"
 
@@ -328,7 +328,7 @@ class TestIntegrationAda:
         assert os.path.exists(paths["functions"])
 
         # Verify function cache
-        with open(paths["functions"]) as f:
+        with open(paths["functions"], encoding="utf-8") as f:
             funcs_data = json.load(f)
         funcs = funcs_data["functions"]
         func_names = {f["name"] for f in funcs}
@@ -339,7 +339,7 @@ class TestIntegrationAda:
         assert len(main["calls"]) > 0
 
         # Verify type cache has Ada types
-        with open(paths["types"]) as f:
+        with open(paths["types"], encoding="utf-8") as f:
             types_data = json.load(f)
         type_defs = types_data["type_definitions"]
         assert "Status" in type_defs
@@ -360,7 +360,7 @@ class TestIntegrationAda:
         assert os.path.exists(os.path.join(out_dir, "appendix.md"))
 
         # Verify appendix has Ada syntax, not C
-        with open(os.path.join(out_dir, "appendix.md")) as f:
+        with open(os.path.join(out_dir, "appendix.md"), encoding="utf-8") as f:
             appendix = f.read()
         assert "end record" in appendix or "type" in appendix
         assert "typedef struct" not in appendix
@@ -385,7 +385,7 @@ class TestIntegrationAda:
 
         # Heading should use .adb not .c
         assert os.path.exists(os.path.join(out_dir, "main.md"))
-        with open(os.path.join(out_dir, "main.md")) as f:
+        with open(os.path.join(out_dir, "main.md"), encoding="utf-8") as f:
             first_line = f.readline().strip()
         assert first_line == "# main.adb"
 
@@ -408,7 +408,7 @@ class TestIntegrationAda:
         run_docgen_phase(docgen_args)
 
         # Init_Spi has an 'out' parameter and a global var
-        with open(os.path.join(out_dir, "Init_Spi.md")) as f:
+        with open(os.path.join(out_dir, "Init_Spi.md"), encoding="utf-8") as f:
             md = f.read()
         assert "out" in md  # direction mode
 
