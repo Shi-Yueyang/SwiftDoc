@@ -235,7 +235,7 @@ def build_parser(default_cache_dir):
     )
     generate_parser.add_argument(
         "--style",
-        choices=["modern", "plain"],
+        choices=["modern", "plain", "table"],
         default=argparse.SUPPRESS,
         help="Graph plotting style (default: plain)",
     )

@@ -174,21 +174,34 @@ def _add_algorithm_section(doc, algo, heading_level):
     doc.add_paragraph()
 
 
-def _add_call_graph(doc, fname, figures_dir, heading_level):
+def _add_call_graph(doc, func, fname, figures_dir, heading_level, style="plain"):
     doc.add_heading("接口", level=heading_level)
-    safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
-    img_path = os.path.join(figures_dir, f"{safe_name}.png")
-    if os.path.exists(img_path):
-        try:
-            doc.add_picture(img_path, width=Inches(5.5))
-            last_paragraph = doc.paragraphs[-1]
-            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        except Exception:
-            logger.debug("Failed to embed image: %s", img_path)
+    if style == "table":
+        callers = [c for c in func.get("called_by", []) if c != fname]
+        callees = [c for c in func.get("calls", []) if c != fname]
+        max_rows = max(len(callers), len(callees), 1)
+        table = doc.add_table(rows=max_rows + 1, cols=2)
+        table.style = "Table Grid"
+        _style_header_row(table, ["Callers", "Callees"])
+        for i in range(max_rows):
+            row = table.rows[i + 1]
+            _set_cell_text(row.cells[0], callers[i] if i < len(callers) else "")
+            _set_cell_text(row.cells[1], callees[i] if i < len(callees) else "")
+    else:
+        safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
+        img_path = os.path.join(figures_dir, f"{safe_name}.png")
+        if os.path.exists(img_path):
+            try:
+                doc.add_picture(img_path, width=Inches(5.5))
+                last_paragraph = doc.paragraphs[-1]
+                last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            except Exception:
+                logger.debug("Failed to embed image: %s", img_path)
     doc.add_paragraph()
 
 
-def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level):
+def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level,
+                         style="plain"):
     fname = func.get("name", "unknown_func")
     doc.add_heading(fname, level=heading_level)
 
@@ -202,14 +215,15 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
     _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map, heading_level + 1)
     _add_local_data_table(doc, heading_level + 1)
     _add_algorithm_section(doc, func.get("algorithm_logic", ""), heading_level + 1)
-    _add_call_graph(doc, fname, figures_dir, heading_level + 1)
+    _add_call_graph(doc, func, fname, figures_dir, heading_level + 1, style=style)
 
 
 def _sanitize_filename(name):
     return name.replace("\\", "_").replace("/", "_").replace(":", "_")
 
 
-def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir):
+def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir,
+                                        style="plain"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
@@ -218,13 +232,15 @@ def generate_function_docx_per_function(function_list, types_json, figures_dir, 
         func = normalize_function_for_doc(raw_func)
         fname = func.get("name", "unknown_func")
         doc = _create_document()
-        _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=1)
+        _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=1,
+                              style=style)
 
         safe_name = _sanitize_filename(fname)
         doc.save(os.path.join(output_dir, f"{safe_name}.docx"))
 
 
-def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir):
+def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir,
+                                   style="plain"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
@@ -244,7 +260,8 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
-            _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=2)
+            _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=2,
+                                  style=style)
             doc.add_page_break()
 
         safe_base = _sanitize_filename(base)
@@ -252,7 +269,8 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
 
 def generate_function_docx(functions_json=None, function_list=None, types_json=None,
-                           figures_dir=None, output_dir="DOCX", group_by="function"):
+                           figures_dir=None, output_dir="DOCX", group_by="function",
+                           style="plain"):
     if function_list is not None:
         functions = function_list
     else:
@@ -268,6 +286,6 @@ def generate_function_docx(functions_json=None, function_list=None, types_json=N
         raise ValueError("figures_dir must be provided")
 
     if group_by == "file":
-        generate_function_docx_by_file(functions, types_json, figures_dir, output_dir)
+        generate_function_docx_by_file(functions, types_json, figures_dir, output_dir, style=style)
     else:
-        generate_function_docx_per_function(functions, types_json, figures_dir, output_dir)
+        generate_function_docx_per_function(functions, types_json, figures_dir, output_dir, style=style)

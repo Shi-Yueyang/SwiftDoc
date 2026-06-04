@@ -10,7 +10,7 @@ from generators.common import normalize_function_for_doc, load_types, build_type
 logger = logging.getLogger(__name__)
 
 
-def _write_function_section(func, type_refs, type_desc_map, figures_dir):
+def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="plain"):
     """Return a list of markdown lines for a single function section."""
     fname = func.get("name", "unknown_func")
     lines = [f"## {fname}", "", f"**function：{fname}**", ""]
@@ -88,17 +88,29 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir):
     lines.append(algo)
     lines.append("")
 
-    # Call graph
-    img_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_") + ".png"
-    img_abs_path = os.path.join(figures_dir, img_name)
+    # Call graph / table
     lines.append("### 接口")
-    lines.append(f"![]({img_abs_path})")
+    if style == "table":
+        callers = [c for c in func.get("called_by", []) if c != fname]
+        callees = [c for c in func.get("calls", []) if c != fname]
+        lines.append("| Callers | Callees |")
+        lines.append("|---------|---------|")
+        max_rows = max(len(callers), len(callees), 1)
+        for i in range(max_rows):
+            c1 = callers[i] if i < len(callers) else ""
+            c2 = callees[i] if i < len(callees) else ""
+            lines.append(f"| {c1} | {c2} |")
+    else:
+        img_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_") + ".png"
+        img_abs_path = os.path.join(figures_dir, img_name)
+        lines.append(f"![]({img_abs_path})")
     lines.append("")
 
     return lines
 
 
-def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir):
+def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir,
+                                     style="plain"):
     """Generate one .md file per function."""
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -108,14 +120,15 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
         func = normalize_function_for_doc(raw_func)
         fname = func.get("name", "unknown_func")
         lines = [f"# {fname}", ""]
-        lines += _write_function_section(func, type_refs, type_desc_map, figures_dir)[1:]  # skip the ## header
+        lines += _write_function_section(func, type_refs, type_desc_map, figures_dir, style=style)[1:]
 
         safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
         with open(os.path.join(output_dir, f"{safe_name}.md"), "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
 
-def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir):
+def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir,
+                                 style="plain"):
     """Generate one .md file per source file, grouping functions together."""
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -135,7 +148,7 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
-            lines += _write_function_section(func, type_refs, type_desc_map, figures_dir)
+            lines += _write_function_section(func, type_refs, type_desc_map, figures_dir, style=style)
             lines.append("---")
             lines.append("")
 
@@ -144,7 +157,8 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
 
 def generate_function_md(functions_json=None, function_list=None, types_json=None,
-                         figures_dir=None, output_dir="MD", group_by="function"):
+                         figures_dir=None, output_dir="MD", group_by="function",
+                         style="plain"):
     if function_list is not None:
         functions = function_list
     else:
@@ -160,6 +174,6 @@ def generate_function_md(functions_json=None, function_list=None, types_json=Non
         raise ValueError("figures_dir must be provided")
 
     if group_by == "file":
-        generate_function_md_by_file(functions, types_json, figures_dir, output_dir)
+        generate_function_md_by_file(functions, types_json, figures_dir, output_dir, style=style)
     else:
-        generate_function_md_per_function(functions, types_json, figures_dir, output_dir)
+        generate_function_md_per_function(functions, types_json, figures_dir, output_dir, style=style)

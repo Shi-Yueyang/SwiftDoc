@@ -167,7 +167,9 @@ def run_docgen_phase(args):
 
     figures_dir = os.path.join(output_folder, "figures")
     graph_style = getattr(args, "style", "plain")
-    generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir, style=graph_style)
+
+    if graph_style != "table":
+        generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir, style=graph_style)
 
     generator.generate_functions(
         functions_json=None,
@@ -176,6 +178,7 @@ def run_docgen_phase(args):
         figures_dir=figures_dir,
         output_dir=output_folder,
         group_by=getattr(args, "group_by", "file"),
+        style=graph_style,
     )
 
     appendix_ext = get_format_extension(output_format)
