@@ -152,12 +152,27 @@ def extract_calls_from_body(body_node):
         if node.type == "call_expression":
             func_node = node.child_by_field_name("function")
             if func_node:
-                ident = find_identifier(func_node)
-                if ident:
-                    called.add(get_node_text(ident))
+                # (TypeName)(expr) is a C cast, not a function call.
+                # Tree-sitter parses these as call_expression nodes where the
+                # "function" is a parenthesized_expression wrapping a bare identifier.
+                if _is_cast_expression(func_node):
+                    pass  # skip — it's a cast
+                else:
+                    ident = find_identifier(func_node)
+                    if ident:
+                        called.add(get_node_text(ident))
         for child in node.children:
             stack.append(child)
     return list(called)
+
+
+def _is_cast_expression(func_node):
+    """Return True if *func_node* is a parenthesized type name (a C cast)."""
+    if func_node.type != "parenthesized_expression":
+        return False
+    # Find the first named child inside the parens
+    named = [c for c in func_node.children if c.is_named]
+    return len(named) == 1 and named[0].type == "identifier"
 
 
 # 提取函数
@@ -387,12 +402,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                 for gname in global_read | global_written:
                     ginfo = referenced_globals[gname]
                     gtype = ginfo["type"]
-                    if gname in global_read and gname in global_written:
-                        direction = "in out"
-                    elif gname in global_written:
-                        direction = "out"
-                    else:
-                        direction = "in"
+                    direction = "in out" if gname in global_written else "in"
                     type_ref = get_type_ref(gtype, type_refs)
                     if type_ref is None:
                         type_ref = ""

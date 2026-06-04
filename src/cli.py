@@ -67,6 +67,16 @@ def _resolve_config_and_root(cli_args):
         if not root_dir:
             print("Error: root_dir is required in TOML config", file=sys.stderr)
             sys.exit(1)
+    elif positional and os.path.isfile(positional):
+        # Single source file — treat parent dir as root, file as analyse_dir
+        root_dir = os.path.dirname(os.path.abspath(positional))
+        # Auto-discover swift-doc.toml from the parent dir
+        config_path = find_config(root_dir)
+        if config_path:
+            toml_config = load_toml(config_path)
+        # Set analyse_dirs to this single file (unless CLI already set it)
+        if not hasattr(cli_args, "analyse_dir"):
+            cli_args.analyse_dir = [os.path.abspath(positional)]
     elif positional:
         # Directory — look for swift-doc.toml inside
         if not os.path.isdir(positional):

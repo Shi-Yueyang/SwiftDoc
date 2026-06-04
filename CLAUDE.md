@@ -8,65 +8,128 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install in editable mode
 pip install -e .
 
-# Run tests
+# Run tests (370 tests, all passing)
 pytest tests/ -v
+pytest tests/ -q
 
 # Run a single test file or test
-pytest tests/test_extract_globals.py -v
-pytest tests/test_extract_globals.py::TestCollectGlobalsFromCFile::test_finds_global_variables -v
+pytest tests/test_module_analysis.py -v
+pytest tests/test_module_analysis.py::TestAnalyzePointerDirections -v
 
 # Build standalone executable
 pip install pyinstaller
-pyinstaller --name auto-md --onefile --clean --paths src src/cli.py
+pyinstaller --name swift-doc --onefile --clean --paths src src/cli.py
 ```
 
 Run the CLI:
 ```bash
-python -m cli generate c examples/c --ai off
-python -m cli config                          # interactive AI setup
-python -m cli config temperature 0.7          # set individual config values
+swift-doc generate examples/c --ai off
+swift-doc generate examples/c/test/test.c --ai off    # single file
+swift-doc generate my-config.toml --ai off            # TOML config
+swift-doc config                                       # interactive AI setup
+swift-doc config temperature 0.7                       # set individual config values
+swift-doc clear-cache                                  # clear last-used cache
+swift-doc clear-cache --cache_dir .analysis            # clear specific cache
 ```
 
 ## Architecture
 
 **Two-phase pipeline** orchestrated by `pipeline.py`:
 
-1. **Extract phase** (`run_extract_phase`): Walks the source tree, parses C files with tree-sitter, extracts globals/types/functions, optionally enriches with AI descriptions, and writes JSON caches to the cache dir.
-2. **Docgen phase** (`run_docgen_phase`): Reads cached JSON, filters functions by `--analyse_dir`, generates markdown docs and call-graph PNGs.
+1. **Extract phase** (`run_extract_phase`): Walks the source tree, parses source files with tree-sitter, extracts globals/types/functions, optionally enriches with AI descriptions, and writes JSON caches to the cache dir. Cache stores COMPLETE data — no filtering here.
+2. **Docgen phase** (`run_docgen_phase`): Reads cached JSON, filters functions by `--analyse_dir`, applies `--ignore-calls`/`--ignore-types` filtering at docgen time (cache stays untainted), generates docs and call-graph PNGs.
 
-**Parser plugin system** (`parsers/`): `BaseParser` is the ABC with `extract_functions()`, `extract_globals()`, and `extract_types()`. `CParser` is the only implementation. New languages are registered via `parsers/__init__.py` → `register_parser()`.
+**Parser plugin system** (`parsers/`): `BaseParser` is the ABC with `extract_functions()`, `extract_globals()`, and `extract_types()`. `CParser` and `AdaParser` are the implementations. New languages are registered via `parsers/__init__.py` → `register_parser()`.
 
-**Generator plugin system** (`generators/`): Modules are imported by format name. Only `markdown` exists today. Must export `generate_functions()` and `generate_appendix()`. Registered in `generators/__init__.py`.
+**Generator plugin system** (`generators/`): Supports `markdown` and `docx` formats (default: `docx`). Modules must export `generate_functions()` and `generate_appendix()`. Registered in `generators/__init__.py`.
 
 **AI integration** (`core/ai.py`): Uses the OpenAI SDK (compatible with any OpenAI-compatible API). Prompts are crafted in `ai_prompt_for_function()` and `ai_prompt_for_type()`. Retry with doubling `max_tokens` on empty responses. The `AI_FAILED` sentinel (`"ai failed"`) marks unrecoverable failures.
 
 **C parsing** (`parsers/c/`): Three tree-sitter-based extractors:
 - `globals.py` — walks declarations outside functions, distinguishes static/extern/definition
 - `types.py` — regex-based extraction of typedefs/structs/unions/enums from `.h` files, with comment association
-- `functions.py` — parses `.c` files for function definitions, resolves parameter types, global variable reads/writes, and call relationships; builds `called_by` cross-references
+- `functions.py` — parses `.c` files for function definitions, resolves parameter types, pointer parameter directions (in/out/in out), global variable reads/writes (with direction), return types, and call relationships; builds `called_by` cross-references. Hardcoded call filter: `_IGNORED_CALLS = {"memcpy", "memset"}`.
 
 **Change detection** (`core/compare.py`): `compare_functions()` and `compare_types()` diff fresh extractions against cached data using `normalized_body` (whitespace-stripped) or structural type keys. Only changed items trigger AI re-runs. Supports rename detection by matching bodies/structures across added/removed sets.
 
-**Config** (`config/manager.py`): User config stored per-platform (Windows: `%APPDATA%\aoto-md\config.json`, macOS: `~/Library/Application Support/aoto-md/config.json`, Linux: `~/.config/aoto-md/config.json`). Required keys: `api_key`, `base_url`, `model_name`. Optional: `temperature` (default 1.0), `max_tokens` (default 800), `retry_count` (default 1).
+**Config** (`config/`):
+- `manager.py` — AI config stored per-platform in `swift-doc/config.json` (Windows: `%APPDATA%\swift-doc\`, macOS: `~/Library/Application Support/swift-doc/`, Linux: `~/.config/swift-doc/`). Required keys: `api_key`, `base_url`, `model_name`. Optional: `temperature` (default 1.0), `max_tokens` (default 800), `retry_count` (default 1). `STATE_DIR` is the config directory path. `APP_DIR_NAME = "swift-doc"`.
+- `toml_config.py` — Project-level TOML config (`swift-doc.toml`). `load_toml(path)` parses a config file, `find_config(dir)` looks for `swift-doc.toml` in a directory. `DEFAULT_CONFIG_NAME = "swift-doc.toml"`.
+
+**Call-graph images** (`generators/images.py`): matplotlib-based renderer with a `STYLES` dict:
+- `"plain"` (default) — black/white, no shadows, sharp edges, thin lines
+- `"modern"` — colorful with shadows, rounded corners, blue-gray backgrounds
 
 **Data types** (`parsers/types.py`): TypedDict definitions for `GlobalVar`, `TypeDef`, `TypesData`, `FuncInput`, `FuncReturn`, `FuncDef` — these are the canonical shapes passed between parser, AI, compare, and generator modules.
+
+## TOML Project Config (`swift-doc.toml`)
+
+Placed in project root. Holds all CLI params. Resolution: **CLI args > TOML > built-in defaults**.
+
+Discovery flow in `cli.py:_resolve_config_and_root()`:
+- Positional ends with `.toml` → load that file, `root_dir` must be in TOML
+- Positional is a file (e.g. `foo.c`) → parent dir = root_dir, file = auto `analyse_dir`
+- Positional is a directory → use as root_dir, look for `swift-doc.toml` inside
+- No positional → look for `swift-doc.toml` in CWD
+- Nothing found → error and exit
+
+Example:
+```toml
+root_dir = "examples/c"
+lang = "c"
+format = "docx"
+group_by = "file"
+style = "plain"
+ai = "off"
+
+[ignore]
+calls = ["memcpy", "memset"]
+types = ["noisy_type"]
+```
+
+CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distinguish "not passed" from "passed with default value." Merge happens in `cli.py:_resolve()`.
+
+## Ignore Filtering
+
+- `--ignore-calls` / `[ignore] calls` — filters function names from `calls` lists (not `called_by`). Applied at **docgen time** — cache stores complete data. Changing ignore lists never invalidates cache.
+- `--ignore-types` / `[ignore] types` — strips type names from `type_refs` and clears `type_ref` on global-variable inputs. Also applied at **docgen time**.
+- Hardcoded baseline at extraction time: `_IGNORED_CALLS = {"memcpy", "memset"}` in `parsers/c/functions.py` — these are always filtered.
 
 ## Key Conventions
 
 - Cache JSON files are named `{folder_name}_{globals|functions|global_types}.json` where `folder_name` is the basename of the project root.
-- Function identity key is `(name, file)` tuple — this allows static functions in different translation units to coexist.
+- Function identity key is `(name, file)` tuple — allows static functions in different translation units to coexist.
 - The `--ai` flag accepts `"on"` or `"off"` (default: `"off"`).
 - Encoding: files are decoded with chardet detection; `gb18030` is the fallback for Chinese-encoded source.
 - `examples/c/` is a sample C project used for both manual testing and as a reference.
 - ANSI color output is gated on `sys.stderr.isatty()` for piped/redirected usage.
+- Group-by default: `file` (one doc per source file). Format default: `docx`.
+
+## Development Conventions
+
+**Every bug fix must include a regression test.** Add it to the appropriate file under `tests/`. Match the existing test class and method naming style (`TestCamelCase`, `test_snake_case`). Use inline C code strings via `parse_c_code()` for unit tests, temp files via `tmp_dir`/`tmp_path` fixtures for file-level tests.
+
+**Keep CLAUDE.md current.** After any significant change — new feature, renamed component, changed default, fixed a tricky bug — update this file so the next agent has accurate context.
+
+**Run the full suite before declaring done.** `pytest tests/ -q` must pass. If changing defaults, check that no existing test silently depends on the old default.
+
+**Verify end-to-end for behavior changes.** Run `swift-doc generate examples/c --ai off` and inspect the output when touching extraction, generation, or filtering code. A passing unit test doesn't always catch a broken pipeline.
+
+**Match existing patterns.** Follow the code style, naming, and structure already in the file you're editing. New test helpers mirror `parse_c_code()` / `find_first_function_node()` in `test_module_analysis.py`. New config keys follow the `OPTIONAL_CONFIG_JSON_MAP` pattern.
+
+**Cache is source-of-truth.** Extraction produces complete, unfiltered data. Filtering (`--ignore-calls`, `--ignore-types`) happens at docgen time only. Never bake presentation concerns into the cache JSON.
+
+**tree-sitter node identity is unreliable.** `node is other` and `node == other` can both fail. Always compare `start_byte` positions.
+
+## Known Bugs Fixed & Patterns to Watch
+
+1. **Functions inside `#ifdef`/`#if`**: Must walk tree recursively — `root_node.children` skips preproc-wrapped nodes. Use `while stack:` traversal.
+2. **tree-sitter node identity**: `node is other` and `node == other` are unreliable. Compare `start_byte` positions instead.
+3. **Subscript writes** (`arr[0] = x`): `is_identifier_written()` must walk up through `subscript_expression`, `field_expression`, `pointer_expression` chain to find the enclosing `assignment_expression`.
+4. **Cast vs call**: `(TypeName)(expr)` is parsed as `call_expression`. `_is_cast_expression()` detects when the "function" is a `parenthesized_expression` wrapping a bare `identifier` — skip it.
+5. **Pointer types**: `child_by_field_name("type")` only returns the base type. Pointer stars live in `pointer_declarator` children — must collect them separately.
+6. **Global variable direction**: Must be three-way: `in` (read-only), `out` (write-only), `in out` (both). Old code only had `in`/`in out`.
 
 ## Communication Style
 
-Speak warmly and naturally.
-
-Use affectionate words occasionally:
-
-- dear
-- sweetie
-
-Avoid repetition.
+Speak warmly and naturally. Use affectionate words occasionally: dear, sweetie. Avoid repetition.

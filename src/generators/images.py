@@ -66,7 +66,38 @@ STYLES = {
     },
 }
 
-MAX_NAME_LEN = 34
+# Max characters per line before wrapping (center / side cards)
+CENTER_WRAP = 28
+SIDE_WRAP = 22
+
+
+def _wrap_text(text, max_chars):
+    """Split *text* into lines, each at most *max_chars* characters.
+
+    Prefers breaking at underscores; falls back to hard cut.
+    """
+    if len(text) <= max_chars:
+        return text
+    lines = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= max_chars:
+            lines.append(remaining)
+            break
+        chunk = remaining[:max_chars]
+        cut = chunk.rfind("_")
+        if cut > max_chars // 2:
+            lines.append(remaining[:cut + 1])
+            remaining = remaining[cut + 1:]
+        else:
+            cut = chunk.rfind("_")
+            if cut > 0:
+                lines.append(remaining[:cut])
+                remaining = remaining[cut + 1:]
+            else:
+                lines.append(remaining[:max_chars])
+                remaining = remaining[max_chars:]
+    return "\n".join(lines)
 
 
 def estimate_text_units(text):
@@ -84,12 +115,17 @@ def estimate_text_units(text):
 
 
 def get_box_width(text, char_width=0.12, min_width=2.0, padding=0.0, fontsize=11):
+    """Return box width; for multiline text uses the widest line."""
     scale = fontsize / 11.0
-    return max(min_width * scale, estimate_text_units(text) * char_width * scale)
+    if "\n" in text:
+        widest = max(estimate_text_units(line) for line in text.split("\n"))
+    else:
+        widest = estimate_text_units(text)
+    return max(min_width * scale, widest * char_width * scale)
 
 
-def get_box_height(fontsize):
-    return fontsize * 0.024
+def get_box_height(fontsize, lines=1):
+    return fontsize * 0.036 * lines
 
 
 def draw_card(ax, x, y, width, height, text, fill, edge, text_color, fontsize=11,
@@ -161,12 +197,6 @@ def draw_connector(ax, start, end, color, linewidth=2.8):
 
 
 
-def _truncated(text):
-    if len(text) > MAX_NAME_LEN:
-        return text[:MAX_NAME_LEN - 1] + "…"
-    return text
-
-
 def generate_function_graphs(json_path=None, output_dir=".analysis/figures", function_list=None,
                             style="plain"):
     if function_list is not None:
@@ -199,42 +229,74 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
 
     for idx, total, func in iter_progress(functions, "Generating graphs"):
         fname = func.get("name", "unknown")
-        callers = func.get("called_by", [])
-        callees = func.get("calls", [])
+        callers = [c for c in func.get("called_by", []) if c != fname]
+        callees = [c for c in func.get("calls", []) if c != fname]
 
         logger.debug("(%s/%s) Generating: %s", idx, total, fname)
 
-        fname_display = _truncated(fname)
-        center_height = get_box_height(CENTER_FS)
+        fname_display = _wrap_text(fname, CENTER_WRAP)
+        center_height = get_box_height(CENTER_FS, lines=fname_display.count("\n") + 1)
         side_height = get_box_height(SIDE_FS)
 
+        wrapped = {fname: fname_display}
         box_widths = {}
+        box_heights = {}
         box_widths[fname] = get_box_width(fname_display, min_width=2.8, padding=0.0, fontsize=CENTER_FS)
+        box_heights[fname] = center_height
         for c in callers:
-            box_widths[c] = get_box_width(_truncated(c), fontsize=SIDE_FS)
+            wtext = _wrap_text(c, SIDE_WRAP)
+            wrapped[c] = wtext
+            box_widths[c] = get_box_width(wtext, fontsize=SIDE_FS)
+            box_heights[c] = get_box_height(SIDE_FS, lines=wtext.count("\n") + 1)
         for c in callees:
-            box_widths[c] = get_box_width(_truncated(c), fontsize=SIDE_FS)
+            wtext = _wrap_text(c, SIDE_WRAP)
+            wrapped[c] = wtext
+            box_widths[c] = get_box_width(wtext, fontsize=SIDE_FS)
+            box_heights[c] = get_box_height(SIDE_FS, lines=wtext.count("\n") + 1)
 
         pos = {}
         mid_w = box_widths[fname]
         pos[fname] = (0, 0)
 
+        # Stack callers from top to bottom, accounting for varying heights
         caller_right_edge = -mid_w / 2 - gap
-        for i, c in enumerate(callers):
+        total_caller_h = sum(box_heights.get(c, side_height) for c in callers) if callers else 0
+        caller_gap = 0.18 if callers else 0
+        caller_y_start = (total_caller_h + caller_gap * (len(callers) - 1)) / 2
+        cy = caller_y_start
+        for c in callers:
             w = box_widths[c]
+            h = box_heights.get(c, side_height)
             x = caller_right_edge - w / 2
-            y = i * y_step - (len(callers) - 1) * y_step / 2
+            y = cy - h / 2
+            cy -= h + caller_gap
             pos[c] = (x, y)
 
+        # Stack callees from top to bottom
         callee_left_edge = mid_w / 2 + gap
-        for i, c in enumerate(callees):
+        total_callee_h = sum(box_heights.get(c, side_height) for c in callees) if callees else 0
+        callee_gap = 0.18 if callees else 0
+        callee_y_start = (total_callee_h + callee_gap * (len(callees) - 1)) / 2
+        cy = callee_y_start
+        for c in callees:
             w = box_widths[c]
+            h = box_heights.get(c, side_height)
             x = callee_left_edge + w / 2
-            y = i * y_step - (len(callees) - 1) * y_step / 2
+            y = cy - h / 2
+            cy -= h + callee_gap
             pos[c] = (x, y)
 
         max_h = max(len(callers), len(callees), 1)
-        fig, ax = plt.subplots(figsize=(14, max(5.0, max_h * 1.25)))
+
+        # Compute actual vertical extent from positions + box heights
+        all_y_edges = []
+        for node_name, (_, py) in pos.items():
+            h = box_heights.get(node_name, side_height)
+            all_y_edges.append(py - h / 2)
+            all_y_edges.append(py + h / 2)
+
+        total_height = (max(all_y_edges) - min(all_y_edges)) if all_y_edges else 1.0
+        fig, ax = plt.subplots(figsize=(14, max(5.0, total_height * 1.3)))
         fig.patch.set_facecolor(st["background_color"])
         ax.set_facecolor(st["background_color"])
 
@@ -242,11 +304,10 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         for node_name, (x, _) in pos.items():
             horizontal_edges.append(x - box_widths[node_name] / 2)
             horizontal_edges.append(x + box_widths[node_name] / 2)
-        y_values = [y for _, y in pos.values()] or [0]
         min_x = min(horizontal_edges) - 0.6
         max_x = max(horizontal_edges) + 0.6
-        min_y = min(y_values) - 0.5
-        max_y = max(y_values) + 0.5
+        min_y = min(all_y_edges) - 0.5
+        max_y = max(all_y_edges) + 0.5
 
         panel = FancyBboxPatch(
             (min_x + 0.15, min_y + 0.15),
@@ -262,7 +323,7 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
 
         draw_card(
             ax, pos[fname][0], pos[fname][1],
-            box_widths[fname], center_height, fname_display,
+            box_widths[fname], box_heights[fname], wrapped[fname],
             st["center_fill"], st["center_edge"], st["center_text"],
             fontsize=CENTER_FS, style=st,
         )
@@ -270,9 +331,10 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         if callers:
             for c in callers:
                 x0, y0 = pos[c]
+                ch = box_heights.get(c, side_height)
                 draw_card(
                     ax, x0, y0,
-                    box_widths[c], side_height, _truncated(c),
+                    box_widths[c], ch, wrapped.get(c, c),
                     st["caller_fill"], st["caller_edge"], st["caller_text"],
                     fontsize=SIDE_FS, style=st,
                 )
@@ -287,9 +349,10 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         if callees:
             for c in callees:
                 x1, y1 = pos[c]
+                ch = box_heights.get(c, side_height)
                 draw_card(
                     ax, x1, y1,
-                    box_widths[c], side_height, _truncated(c),
+                    box_widths[c], ch, wrapped.get(c, c),
                     st["callee_fill"], st["callee_edge"], st["callee_text"],
                     fontsize=SIDE_FS, style=st,
                 )

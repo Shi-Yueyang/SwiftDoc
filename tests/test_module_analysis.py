@@ -151,6 +151,22 @@ class TestExtractCallsFromBody:
         calls = extract_calls_from_body(body)
         assert calls == []
 
+    def test_cast_is_not_a_call(self):
+        code = "void foo() { int c = (DIS)(temp); }"
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "foo")
+        body = func_node.child_by_field_name("body")
+        calls = extract_calls_from_body(body)
+        assert "DIS" not in calls, f"Cast (DIS)(temp) should not be a call, got: {calls}"
+
+    def test_function_pointer_call_still_works(self):
+        code = "void foo() { (*fptr)(42); }"
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "foo")
+        body = func_node.child_by_field_name("body")
+        calls = extract_calls_from_body(body)
+        assert "fptr" in calls, f"Function pointer call (*fptr)() should be detected"
+
 
 class TestCleanFunctionBody:
     def test_removes_line_comments(self):
