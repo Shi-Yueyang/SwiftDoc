@@ -2,35 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build & Test Commands
+## Build, Test & CLI Usage
 
-```bash
-# Install in editable mode
-pip install -e .
-
-# Run tests (370 tests, all passing)
-pytest tests/ -v
-pytest tests/ -q
-
-# Run a single test file or test
-pytest tests/test_module_analysis.py -v
-pytest tests/test_module_analysis.py::TestAnalyzePointerDirections -v
-
-# Build standalone executable
-pip install pyinstaller
-pyinstaller --name swift-doc --onefile --clean --paths src src/cli.py
-```
-
-Run the CLI:
-```bash
-swift-doc generate examples/c --ai off
-swift-doc generate examples/c/test/test.c --ai off    # single file
-swift-doc generate my-config.toml --ai off            # TOML config
-swift-doc config                                       # interactive AI setup
-swift-doc config temperature 0.7                       # set individual config values
-swift-doc clear-cache                                  # clear last-used cache
-swift-doc clear-cache --cache_dir .analysis            # clear specific cache
-```
+See [README.md](README.md) for build, test, and CLI commands.
 
 ## Architecture
 
@@ -102,7 +76,7 @@ CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distin
 
 ## Key Conventions
 
-- Cache JSON files are named `{folder_name}_{globals|functions|global_types}.json` where `folder_name` is the basename of the project root.
+- Cache JSON files are named `{folder_name}_{global_variables|functions|global_types}.json` where `folder_name` is the basename of the project root.
 - Function identity key is `(name, file)` tuple — allows static functions in different translation units to coexist.
 - The `--ai` flag accepts `"on"` or `"off"` (default: `"off"`).
 - Encoding: files are decoded with chardet detection; `gb18030` is the fallback for Chinese-encoded source.
@@ -126,16 +100,9 @@ CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distin
 
 **tree-sitter node identity is unreliable.** `node is other` and `node == other` can both fail. Always compare `start_byte` positions.
 
-## Known Bugs Fixed & Patterns to Watch
+## Known Bugs
 
-1. **Functions inside `#ifdef`/`#if`**: Must walk tree recursively — `root_node.children` skips preproc-wrapped nodes. Use `while stack:` traversal.
-2. **tree-sitter node identity**: `node is other` and `node == other` are unreliable. Compare `start_byte` positions instead.
-3. **Subscript writes** (`arr[0] = x`): `is_identifier_written()` must walk up through `subscript_expression`, `field_expression`, `pointer_expression` chain to find the enclosing `assignment_expression`.
-4. **Cast vs call**: `(TypeName)(expr)` is parsed as `call_expression`. `_is_cast_expression()` detects when the "function" is a `parenthesized_expression` wrapping a bare `identifier` — skip it.
-5. **Pointer types**: `child_by_field_name("type")` only returns the base type. Pointer stars live in `pointer_declarator` children — must collect them separately.
-6. **Global variable direction**: Two values: `in` (read-only) or `in out` (written at all). No `out`-only for globals.
-7. **Pointer parameter direction**: Three-way: `in` (read-only), `out` (write-only), `in out` (both read and written).
-8. **Preprocessor-broken functions (rescue pass)**: `#ifdef` blocks with unbalanced braces produce ERROR nodes. The rescue pass in `extract_functions_from_c_file()` strips `#`-lines from ERROR text and re-parses — recovering functions that would otherwise be invisible. `_extract_one_function()` is shared by both the normal walk and the rescue pass.
+Historical bugs and patterns to watch are documented in [KNOWN_BUGS.md](KNOWN_BUGS.md).
 
 ## Communication Style
 

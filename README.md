@@ -52,7 +52,8 @@ swift-doc generate examples/c --ai on
 | `--ai` | `off` | `on` / `off` for AI-generated descriptions |
 | `--format` | `docx` | Output format (`markdown`, `docx`) |
 | `--group-by` | `file` | Group docs per `function` or per `file` |
-| `--style` | `plain` | Call-graph style (`plain` black/white, or `modern` colorful) |
+| `--style` | `plain` | Call-graph style (`plain` black/white, `modern` colorful, or `table` inline) |
+| `--ignore-kinds` | — | Type kinds to exclude: typedef, enum, struct, union (repeatable) |
 | `--ignore-calls` | — | Function names to exclude from call graphs (repeatable) |
 | `--ignore-types` | — | Type names to exclude from extraction (repeatable) |
 | `--verbose` | off | Enable debug logging |
@@ -106,6 +107,7 @@ ai = "off"
 [ignore]
 calls = ["memcpy", "memset", "free"]
 types = ["noisy_type"]
+kinds = []
 ```
 
 CLI flags always override TOML values. See `examples/c/swift-doc.toml` for a worked example.
