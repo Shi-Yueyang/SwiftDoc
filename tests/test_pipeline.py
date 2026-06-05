@@ -90,6 +90,40 @@ class TestRunExtractPhase:
         assert os.path.exists(paths["types"])
         assert os.path.exists(paths["functions"])
 
+    def test_single_file_extraction_only_caches_that_file(self, tmp_path):
+        """When analyse_dirs specifies a single .c file, only its functions are cached."""
+        import argparse
+
+        project_dir = str(tmp_path / "project")
+        os.makedirs(project_dir)
+
+        # Create two .c files with different functions
+        with open(os.path.join(project_dir, "file_a.c"), "w") as f:
+            f.write("void func_a(void) {}\n")
+        with open(os.path.join(project_dir, "file_b.c"), "w") as f:
+            f.write("void func_b(void) {}\n")
+
+        cache_dir = str(tmp_path / "cache")
+        target_file = os.path.join(project_dir, "file_a.c")
+
+        args = argparse.Namespace(
+            root_dir=project_dir,
+            cache_dir=cache_dir,
+            ai="off",
+            language="c",
+            analyse_dirs=[target_file],
+        )
+        run_extract_phase(args)
+
+        paths = build_analysis_paths(cache_dir, project_dir)
+        with open(paths["functions"], "r") as f:
+            data = json.load(f)
+        funcs = data.get("functions", [])
+        func_names = {fn["name"] for fn in funcs}
+
+        assert "func_a" in func_names
+        assert "func_b" not in func_names, "func_b should not be in cache when only file_a.c was requested"
+
 
 class TestRunDocgenPhase:
     def test_generates_markdown_and_figures(self, sample_c_project, tmp_path, sample_types_json, sample_globals_json):

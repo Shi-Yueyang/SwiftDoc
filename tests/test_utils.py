@@ -13,6 +13,7 @@ from core.utils import (
     iter_progress,
     highlight_message,
     enable_ansi_support,
+    filter_source_files_by_analyse_dirs,
 )
 
 
@@ -132,3 +133,51 @@ class TestEnableAnsiSupport:
     def test_runs_on_windows(self):
         # Should not raise on import
         pass
+
+
+class TestFilterSourceFilesByAnalyseDirs:
+    def test_exact_file_match(self, tmp_dir):
+        f1 = os.path.join(tmp_dir, "a.c")
+        f2 = os.path.join(tmp_dir, "b.c")
+        for f in (f1, f2):
+            with open(f, "w") as fh:
+                fh.write("// test")
+        result = filter_source_files_by_analyse_dirs([f1, f2], [f1])
+        assert result == [f1]
+
+    def test_directory_match(self, tmp_dir):
+        sub = os.path.join(tmp_dir, "sub")
+        os.makedirs(sub)
+        f1 = os.path.join(sub, "a.c")
+        f2 = os.path.join(tmp_dir, "b.c")
+        for f in (f1, f2):
+            with open(f, "w") as fh:
+                fh.write("// test")
+        result = filter_source_files_by_analyse_dirs([f1, f2], [sub])
+        assert result == [f1]
+
+    def test_mixed_files_and_dirs(self, tmp_dir):
+        sub = os.path.join(tmp_dir, "sub")
+        os.makedirs(sub)
+        f1 = os.path.join(sub, "a.c")
+        f2 = os.path.join(tmp_dir, "b.c")
+        f3 = os.path.join(tmp_dir, "c.c")
+        for f in (f1, f2, f3):
+            with open(f, "w") as fh:
+                fh.write("// test")
+        result = filter_source_files_by_analyse_dirs([f1, f2, f3], [sub, f2])
+        assert set(result) == {f1, f2}
+
+    def test_no_match_returns_empty(self, tmp_dir):
+        f1 = os.path.join(tmp_dir, "a.c")
+        with open(f1, "w") as fh:
+            fh.write("// test")
+        result = filter_source_files_by_analyse_dirs([f1], ["/nonexistent/file.c"])
+        assert result == []
+
+    def test_empty_analyse_dirs_returns_all(self, tmp_dir):
+        f1 = os.path.join(tmp_dir, "a.c")
+        with open(f1, "w") as fh:
+            fh.write("// test")
+        result = filter_source_files_by_analyse_dirs([f1], [])
+        assert result == [f1]

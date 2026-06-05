@@ -126,6 +126,26 @@ def collect_source_files(project_dir, extensions):
     return files
 
 
+def filter_source_files_by_analyse_dirs(source_files, analyse_dirs):
+    """Filter *source_files* to only those matching entries in *analyse_dirs*.
+
+    A file matches if its normalised path exactly equals an entry, or if it
+    starts with entry + ``os.sep`` (i.e. lives inside a directory entry).
+    This mirrors the docgen-phase filter in ``pipeline.py``.
+    """
+    if not analyse_dirs:
+        return source_files
+    normalized_dirs = [os.path.abspath(d) for d in analyse_dirs]
+    result = []
+    for f in source_files:
+        norm_f = os.path.normpath(f)
+        for nd in normalized_dirs:
+            if norm_f == nd or norm_f.startswith(nd + os.sep):
+                result.append(f)
+                break
+    return result
+
+
 def build_cache_name(project_root):
     """Build a collision-resistant cache folder name from an absolute project path.
 

@@ -12,8 +12,8 @@ class CParser(BaseParser):
     supports_types = True
     supports_globals = True
 
-    def extract_globals(self, project_dir: str) -> list[GlobalVar]:
-        return extract_all_globals(project_dir)
+    def extract_globals(self, project_dir: str, analyse_dirs: list[str] | None = None) -> list[GlobalVar]:
+        return extract_all_globals(project_dir, analyse_dirs=analyse_dirs)
 
     def extract_types(
         self, project_dir: str, cache_dir: str, enable_ai: bool = True,
@@ -31,8 +31,9 @@ class CParser(BaseParser):
         types_data: TypesData,
         global_vars: list[GlobalVar],
         enable_ai: bool = True,
+        analyse_dirs: list[str] | None = None,
     ) -> list[FuncDef]:
-        all_functions = scan_all_functions(project_dir, types_data, global_vars)
+        all_functions = scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=analyse_dirs)
         refresh_functions(
             all_functions=all_functions,
             output_json_path=output_json_path,

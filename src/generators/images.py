@@ -479,18 +479,3 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         img.info["dpi"] = (DPI, DPI)
         img.save(out_path)
 
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Generate function call graphs")
-    parser.add_argument("--json", "-j", default=".analysis/INIT_functions.json",
-                        help="Path to functions JSON file (default .analysis/INIT_functions.json)")
-    parser.add_argument("--output", "-o", default=".analysis/figures",
-                        help="Output directory for images (default .analysis/figures)")
-    args = parser.parse_args()
-
-    generate_function_graphs(json_path=args.json, output_dir=args.output)
-
-
-if __name__ == "__main__":
-    main()

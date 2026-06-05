@@ -25,11 +25,12 @@ class BaseParser(ABC):
         types_data: TypesData,
         global_vars: list[GlobalVar],
         enable_ai: bool = True,
+        analyse_dirs: list[str] | None = None,
     ) -> list[FuncDef]:
         """Parse source files, refresh cache, and return function dicts."""
         ...
 
-    def extract_globals(self, project_dir: str) -> list[GlobalVar]:
+    def extract_globals(self, project_dir: str, analyse_dirs: list[str] | None = None) -> list[GlobalVar]:
         """Return global variable dicts found under *project_dir*."""
         return []
 

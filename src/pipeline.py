@@ -50,10 +50,10 @@ def run_extract_phase(args):
 
     project_root = os.path.normpath(args.root_dir)
     analysis_paths = build_analysis_paths(args.cache_dir, project_root)
-
+    analyse_dirs = getattr(args, "analyse_dirs", None)
 
     # --- Globals ---
-    global_vars = parser.extract_globals(project_root)
+    global_vars = parser.extract_globals(project_root, analyse_dirs=analyse_dirs)
     with open(analysis_paths["globals"], "w", encoding="utf-8") as f:
         json.dump({"globals": global_vars}, f, indent=2, ensure_ascii=False)
     logger.info("Found %s global variables", len(global_vars))
@@ -72,6 +72,7 @@ def run_extract_phase(args):
         types_data=types_data,
         global_vars=global_vars,
         enable_ai=enable_ai,
+        analyse_dirs=analyse_dirs,
     )
 
     logger.info(colorize_extract_phase_message("Analysis completed.", EXTRACT_PHASE_DONE_COLOR))

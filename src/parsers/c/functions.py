@@ -15,7 +15,7 @@ import logging
 import chardet
 import tree_sitter_c
 from tree_sitter import Language, Parser
-from core.utils import get_node_text, find_identifier, highlight_message, collect_source_files
+from core.utils import get_node_text, find_identifier, highlight_message, collect_source_files, filter_source_files_by_analyse_dirs
 from parsers.common import (
     load_previous_function_cache,
     write_function_cache,
@@ -33,6 +33,9 @@ parser = Parser(C_LANGUAGE)
 
 # Standard library functions to exclude from call graphs
 _IGNORED_CALLS = {"memcpy", "memset"}
+
+# Regex to detect preprocessor conditionals that may cause parse fragmentation
+_HAS_PREPROC_CONDITIONAL = re.compile(r'^[ \t]*#\s*(ifdef|ifndef|if\s)', re.MULTILINE)
 
 
 # 提取形参
@@ -364,6 +367,51 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
                 for child in rnode.children:
                     rescued_stack.append(child)
 
+    # ── region-based rescue pass ─────────────────────────────────────────
+    # When #if/#ifdef blocks fragment the parse tree into many small nodes
+    # (rather than one clean ERROR node), the per-ERROR rescue above cannot
+    # recover anything.  Instead, find gaps between properly parsed
+    # function_definition nodes, strip #-lines from each gap, and re-parse
+    # the gap in isolation — avoiding cascading brace errors.
+    if error_nodes and _HAS_PREPROC_CONDITIONAL.search(code):
+        # Collect byte ranges of properly parsed functions
+        func_ranges = sorted(
+            (c.start_byte, c.end_byte)
+            for c in root_node.children
+            if c.type == "function_definition"
+        )
+        known_names = {fn["name"] for fn in functions}
+
+        # Build gap regions (text between function definitions)
+        gaps = []
+        prev_end = 0
+        for start, end in func_ranges:
+            if start > prev_end:
+                gaps.append(code[prev_end:start])
+            prev_end = end
+        if prev_end < len(code):
+            gaps.append(code[prev_end:])
+
+        for gap_text in gaps:
+            if "(" not in gap_text or "{" not in gap_text:
+                continue
+            cleaned = re.sub(r"^[ \t]*#.*$", "", gap_text, flags=re.MULTILINE)
+            gap_tree = parser.parse(bytes(cleaned, "utf8"))
+            gap_stack = [gap_tree.root_node]
+            while gap_stack:
+                rnode = gap_stack.pop()
+                if rnode.type == "function_definition":
+                    rescued_funcs = _extract_one_function(
+                        rnode, c_file_path, type_refs, global_lookup)
+                    if rescued_funcs:
+                        for rf in rescued_funcs:
+                            if rf["name"] not in known_names:
+                                functions.append(rf)
+                                known_names.add(rf["name"])
+                else:
+                    for child in rnode.children:
+                        gap_stack.append(child)
+
     return functions
 
 
@@ -454,9 +502,12 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
 
 
 # 分析c文件
-def scan_all_functions(project_dir, types_data, global_vars):
+def scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=None):
     """Scan .c files and return a list of function dicts (no cache I/O)."""
     c_files = collect_source_files(project_dir, (".c",))
+    if analyse_dirs is not None:
+        c_files = filter_source_files_by_analyse_dirs(c_files, analyse_dirs)
+        logger.info("Filtered to %s .c file(s) under analyse_dirs", len(c_files))
     if not c_files:
         logger.debug("No .c files found in %s", project_dir)
         return []

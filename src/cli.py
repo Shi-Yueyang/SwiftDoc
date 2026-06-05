@@ -393,6 +393,7 @@ def main():
             cache_dir=cache_dir,
             ai=ai,
             language=lang,
+            analyse_dirs=analyse_dirs,
         )
         run_extract_phase(extract_args)
 

@@ -27,6 +27,10 @@ void guarded_func(int mode) {
         do_work(mode);
     }
 }
+
+void func_after(){
+    
+}
 """
 
 

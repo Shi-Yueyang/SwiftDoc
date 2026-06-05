@@ -85,6 +85,8 @@ CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distin
 
 ## Development Conventions
 
+**Only focus on the c parser now, forget about the ada parser**
+
 **Every bug fix must include a regression test.** Add it to the appropriate file under `tests/`. Match the existing test class and method naming style (`TestCamelCase`, `test_snake_case`). Use inline C code strings via `parse_c_code()` for unit tests, temp files via `tmp_dir`/`tmp_path` fixtures for file-level tests.
 
 **Keep CLAUDE.md current.** After any significant change — new feature, renamed component, changed default, fixed a tricky bug — update this file so the next agent has accurate context.

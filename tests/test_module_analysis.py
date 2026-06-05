@@ -548,3 +548,44 @@ class TestExtractFunctionsFromCFile:
             f.write(code)
         funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
         assert funcs[0]["return_type"] == "int*"
+
+    def test_rescues_fragmented_preprocessor_functions(self, tmp_dir):
+        """Region-based rescue recovers functions fragmented by #ifdef blocks.
+
+        When #ifdef/#endif directives with unbalanced braces scatter a function
+        across many small tree-sitter nodes, the per-ERROR rescue cannot help.
+        The region-based rescue finds gaps between properly parsed functions,
+        strips #-lines, and re-parses each gap in isolation."""
+        code = """
+        void broken_by_ifdef()
+        {
+
+        #ifdef M1
+            if(1){
+        #endif
+
+        #ifdef M2
+            if(1){
+        #endif
+                int x = 0;
+            }
+        }
+
+        void clean_one(void) {}
+
+        void another_broken(void)
+        {
+        #ifdef M3
+            if(x){
+        #endif
+            }
+        }
+        """
+        path = os.path.join(tmp_dir, "test_fragmented.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        names = {f["name"] for f in funcs}
+        assert "broken_by_ifdef" in names, f"Rescue missed first broken function, got: {names}"
+        assert "clean_one" in names, f"Normal walk missed clean function, got: {names}"
+        assert "another_broken" in names, f"Rescue missed last broken function, got: {names}"

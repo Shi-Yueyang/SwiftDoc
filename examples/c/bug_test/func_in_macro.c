@@ -21,16 +21,3 @@ int input_direction(int* input, BYTE_8* output, int* mixed){
 #endif
 
 
-void braces_inbalance_without_macro()
-{
-
-#ifdef SOME_MACRO
-    if(1){
-#endif
-
-#ifdef OTHER_MACRO
-    if(1){
-#endif
-        printf("");
-    }
-}

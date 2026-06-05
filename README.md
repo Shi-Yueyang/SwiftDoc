@@ -120,30 +120,6 @@ pyinstaller --name swift-doc --onefile --clean --paths src src/cli.py
 # dist/swift-doc  (or dist/swift-doc.exe on Windows)
 ```
 
-## Project Structure
-
-```
-src/
-├── cli.py                        # entry point
-├── pipeline.py                   # two-phase orchestrator
-├── config/
-│   ├── manager.py                # AI config (config.json)
-│   └── toml_config.py            # project config (swift-doc.toml)
-├── core/                         # shared utils, AI client, diff engine
-├── parsers/
-│   ├── base.py                   # BaseParser ABC
-│   ├── c/                        # C parser (tree-sitter)
-│   └── ada/                      # Ada parser (tree-sitter)
-├── generators/
-│   ├── markdown/                 # markdown output
-│   ├── docx/                     # docx output
-│   └── images.py                 # call-graph renderer (Pillow)
-
-examples/
-├── c/                            # sample C project
-└── ada/                          # sample Ada project
-```
-
 ## Running Tests
 
 ```bash

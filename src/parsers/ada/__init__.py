@@ -12,7 +12,7 @@ class AdaParser(BaseParser):
     supports_types = True
     supports_globals = True
 
-    def extract_globals(self, project_dir: str) -> list[GlobalVar]:
+    def extract_globals(self, project_dir: str, analyse_dirs: list[str] | None = None) -> list[GlobalVar]:
         return extract_all_globals(project_dir)
 
     def extract_types(
@@ -31,6 +31,7 @@ class AdaParser(BaseParser):
         types_data: TypesData,
         global_vars: list[GlobalVar],
         enable_ai: bool = True,
+        analyse_dirs: list[str] | None = None,
     ) -> list[FuncDef]:
         all_functions = scan_all_functions(project_dir, types_data, global_vars)
         refresh_functions(

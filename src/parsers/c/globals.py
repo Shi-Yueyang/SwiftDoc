@@ -8,7 +8,7 @@ import logging
 import chardet
 import tree_sitter_c
 from tree_sitter import Language, Parser
-from core.utils import get_node_text, find_identifier, collect_source_files
+from core.utils import get_node_text, find_identifier, collect_source_files, filter_source_files_by_analyse_dirs
 
 
 logger = logging.getLogger(__name__)
@@ -136,8 +136,10 @@ def get_global_key(global_info):
     return global_info["name"]
 
 
-def extract_all_globals(project_dir):
+def extract_all_globals(project_dir, analyse_dirs=None):
     c_files = collect_source_files(project_dir, (".c",))
+    if analyse_dirs is not None:
+        c_files = filter_source_files_by_analyse_dirs(c_files, analyse_dirs)
     h_files = collect_source_files(project_dir, (".h",))
     all_globals = {}
 
