@@ -455,8 +455,8 @@ _EMPTY_LOOKUP = {"external": {}, "static": {}}
 class TestExtractFunctionsFromCFile:
     """Tests for extract_functions_from_c_file — the main per-file extraction."""
 
-    def test_finds_function_inside_ifdef(self, tmp_dir):
-        """Regression: functions inside #ifdef should not be skipped."""
+    def test_finds_function_inside_ifdef_when_defined(self, tmp_dir):
+        """#ifdef-guarded functions are kept when --define activates the macro."""
         code = """
         #ifdef XYZ
         void guarded_func(void) {
@@ -466,9 +466,26 @@ class TestExtractFunctionsFromCFile:
         path = os.path.join(tmp_dir, "test_ifdef.c")
         with open(path, "w", encoding="utf-8") as f:
             f.write(code)
-        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP, defines={"XYZ"})
         names = [f["name"] for f in funcs]
         assert "guarded_func" in names, f"Function inside #ifdef not found, got: {names}"
+
+    def test_ifdef_guarded_code_stripped_without_define(self, tmp_dir):
+        """#ifdef-guarded functions are stripped when the macro is NOT defined."""
+        code = """
+        #ifdef UNDEFINED_MACRO
+        void hidden_func(void) {
+        }
+        #endif
+        void visible_func(void) {}
+        """
+        path = os.path.join(tmp_dir, "test_stripped.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        names = {f["name"] for f in funcs}
+        assert "visible_func" in names
+        assert "hidden_func" not in names, f"Unguarded function should be stripped, got: {names}"
 
     def test_finds_function_inside_if(self, tmp_dir):
         """Regression: functions inside #if should not be skipped."""
@@ -549,43 +566,49 @@ class TestExtractFunctionsFromCFile:
         funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
         assert funcs[0]["return_type"] == "int*"
 
-    def test_rescues_fragmented_preprocessor_functions(self, tmp_dir):
-        """Region-based rescue recovers functions fragmented by #ifdef blocks.
-
-        When #ifdef/#endif directives with unbalanced braces scatter a function
-        across many small tree-sitter nodes, the per-ERROR rescue cannot help.
-        The region-based rescue finds gaps between properly parsed functions,
-        strips #-lines, and re-parses each gap in isolation."""
+    def test_preprocessor_resolves_ifdef_guarded_code(self, tmp_dir):
+        """With --define, #ifdef-guarded branches are kept and parse cleanly."""
         code = """
-        void broken_by_ifdef()
-        {
-
-        #ifdef M1
-            if(1){
-        #endif
-
-        #ifdef M2
-            if(1){
-        #endif
-                int x = 0;
-            }
+        #ifdef FEATURE_A
+        void feature_a_init(void) {
+            int x = 1;
         }
-
-        void clean_one(void) {}
-
-        void another_broken(void)
-        {
-        #ifdef M3
-            if(x){
         #endif
-            }
+
+        void always_visible(void) {}
+
+        #ifdef FEATURE_B
+        void feature_b_init(void) {
+            int y = 2;
         }
+        #endif
         """
-        path = os.path.join(tmp_dir, "test_fragmented.c")
+        path = os.path.join(tmp_dir, "test_preproc.c")
         with open(path, "w", encoding="utf-8") as f:
             f.write(code)
-        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+
+        # With both macros defined, all three functions should parse
+        funcs = extract_functions_from_c_file(
+            path, {}, _EMPTY_LOOKUP, defines={"FEATURE_A", "FEATURE_B"},
+        )
         names = {f["name"] for f in funcs}
-        assert "broken_by_ifdef" in names, f"Rescue missed first broken function, got: {names}"
-        assert "clean_one" in names, f"Normal walk missed clean function, got: {names}"
-        assert "another_broken" in names, f"Rescue missed last broken function, got: {names}"
+        assert "feature_a_init" in names, f"got: {names}"
+        assert "always_visible" in names, f"got: {names}"
+        assert "feature_b_init" in names, f"got: {names}"
+
+    def test_preprocessor_warns_on_remaining_errors(self, tmp_dir, caplog):
+        """After preprocessing, leftover ERROR nodes produce a warning."""
+        code = """
+        }
+        void f(void) {}
+        """
+        path = os.path.join(tmp_dir, "test_unbalanced.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        import logging
+        with caplog.at_level(logging.WARNING):
+            funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        assert "parse error(s) after preprocessing" in caplog.text
+        # f() should still be found despite the error
+        names = {fn["name"] for fn in funcs}
+        assert "f" in names

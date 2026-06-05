@@ -256,6 +256,12 @@ def build_parser(default_cache_dir):
         default=argparse.SUPPRESS,
         help="Type kinds to exclude: typedef, enum, struct, union (repeatable)",
     )
+    generate_parser.add_argument(
+        "--define",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Preprocessor macro to mark as defined (repeatable)",
+    )
 
     config_examples = """Examples:
     swift-doc config
@@ -373,6 +379,11 @@ def main():
         toml_ignore_kinds = toml_config.get("ignore_kinds") if toml_config else None
         ignore_kinds = cli_ignore_kinds or toml_ignore_kinds or []
 
+        # defines: CLI list > TOML list > empty set
+        cli_defines = getattr(cli_args, "define", None)
+        toml_defines = toml_config.get("define_macros") if toml_config else None
+        defines = set(cli_defines or toml_defines or [])
+
         # -- validate --
         try:
             validate_paths(root_dir, analyse_dirs)
@@ -394,6 +405,7 @@ def main():
             ai=ai,
             language=lang,
             analyse_dirs=analyse_dirs,
+            defines=defines,
         )
         run_extract_phase(extract_args)
 

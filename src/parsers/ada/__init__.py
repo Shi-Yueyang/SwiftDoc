@@ -32,6 +32,7 @@ class AdaParser(BaseParser):
         global_vars: list[GlobalVar],
         enable_ai: bool = True,
         analyse_dirs: list[str] | None = None,
+        defines: set | None = None,
     ) -> list[FuncDef]:
         all_functions = scan_all_functions(project_dir, types_data, global_vars)
         refresh_functions(

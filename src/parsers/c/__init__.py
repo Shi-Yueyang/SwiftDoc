@@ -32,8 +32,9 @@ class CParser(BaseParser):
         global_vars: list[GlobalVar],
         enable_ai: bool = True,
         analyse_dirs: list[str] | None = None,
+        defines: set | None = None,
     ) -> list[FuncDef]:
-        all_functions = scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=analyse_dirs)
+        all_functions = scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=analyse_dirs, defines=defines)
         refresh_functions(
             all_functions=all_functions,
             output_json_path=output_json_path,

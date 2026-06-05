@@ -34,8 +34,103 @@ parser = Parser(C_LANGUAGE)
 # Standard library functions to exclude from call graphs
 _IGNORED_CALLS = {"memcpy", "memset"}
 
-# Regex to detect preprocessor conditionals that may cause parse fragmentation
-_HAS_PREPROC_CONDITIONAL = re.compile(r'^[ \t]*#\s*(ifdef|ifndef|if\s)', re.MULTILINE)
+
+def preprocess_c_code(code: str, defines: set | None = None) -> str:
+    """Resolve ``#ifdef`` / ``#ifndef`` / ``#else`` / ``#endif`` directives.
+
+    Lines guarded by ``#ifdef MACRO`` are kept only when *MACRO* is in
+    *defines*; ``#ifndef MACRO`` is the inverse.  ``#else`` flips the
+    current branch's active state.  Directive lines themselves are always
+    stripped from the output.
+
+    ``#if EXPR`` is handled conservatively: if *defines* is non-empty we
+    try to resolve ``defined(NAME)`` sub-expressions; otherwise the whole
+    ``#if`` … ``#endif`` region is kept active (logged at DEBUG level).
+    """
+    if defines is None:
+        defines = set()
+
+    lines = code.split("\n")
+    result = []
+    # Each stack entry: bool — whether the current branch is active
+    stack: list[bool] = []
+
+    for lineno, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        # --- #ifdef MACRO ---
+        m = re.match(r"^#ifdef\s+(\w+)", stripped)
+        if m:
+            stack.append(m.group(1) in defines)
+            continue
+
+        # --- #ifndef MACRO ---
+        m = re.match(r"^#ifndef\s+(\w+)", stripped)
+        if m:
+            stack.append(m.group(1) not in defines)
+            continue
+
+        # --- #else ---
+        if re.match(r"^#else\s*$", stripped):
+            if stack:
+                stack[-1] = not stack[-1]
+            continue
+
+        # --- #endif ---
+        if re.match(r"^#endif\s*$", stripped):
+            if stack:
+                stack.pop()
+            continue
+
+        # --- #if EXPR (conservative: try defined(), else keep active) ---
+        m = re.match(r"^#if\s+(.+)", stripped)
+        if m:
+            expr = m.group(1)
+            active = True  # default: keep visible
+            if defines:
+                # Resolve defined(NAME) → True/False
+                resolved = re.sub(
+                    r"defined\s*\(\s*(\w+)\s*\)",
+                    lambda mo: "1" if mo.group(1) in defines else "0",
+                    expr,
+                )
+                # Replace bare macro names with 1/0
+                for d in sorted(defines, key=len, reverse=True):
+                    resolved = re.sub(
+                        r"\b" + re.escape(d) + r"\b", "1", resolved
+                    )
+                # Any remaining identifier → 0
+                resolved = re.sub(r"\b[a-zA-Z_]\w*\b", "0", resolved)
+                try:
+                    active = bool(eval(resolved, {"__builtins__": {}}))
+                except Exception:
+                    logger.debug(
+                        "Cannot evaluate #if expression %r at line %d, "
+                        "keeping region active",
+                        expr, lineno,
+                    )
+            else:
+                logger.debug(
+                    "No --define flags; #if expression %r at line %d "
+                    "kept active (conservative default)",
+                    expr, lineno,
+                )
+            stack.append(active)
+            continue
+
+        # --- #elif EXPR ---
+        m = re.match(r"^#elif\s+(.+)", stripped)
+        if m and stack:
+            # Flip: #elif is active only if the previous branch wasn't
+            stack[-1] = not stack[-1]
+            continue
+
+        # --- Emit or skip ---
+        is_active = all(stack) if stack else True
+        if is_active:
+            result.append(line)
+
+    return "\n".join(result)
 
 
 # 提取形参
@@ -195,10 +290,7 @@ def clean_function_body(body_code):
 
 # normalized_body部分（用于对比代码改动）
 def normalize_c_code(code: str) -> str:
-    """
-    规范化C代码：去除注释和所有空白字符（空格、制表符、换行等），
-    但保护字符串和字符常量不变。用于机器对比。
-    """
+
     if not code:
         return ""
     # 保护字符串和字符常量
@@ -319,7 +411,7 @@ def _extract_return_type(func_node):
     return return_type
 
 
-def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
+def extract_functions_from_c_file(c_file_path, type_refs, global_lookup, defines=None):
     """
     Parse a single .c file and return a list of information for all functions in the file.
     Each element is a dictionary containing:
@@ -330,6 +422,10 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
     detected = chardet.detect(raw)
     encoding = detected.get("encoding", "utf-8")
     code = raw.decode(encoding, errors="ignore")
+
+    # ── preprocess: resolve #ifdef / #ifndef based on --define flags ──
+    code = preprocess_c_code(code, defines)
+
     tree = parser.parse(bytes(code, "utf8"))
     root_node = tree.root_node
 
@@ -347,70 +443,25 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
             for child in node.children:
                 outer_stack.append(child)
 
-    # ── rescue pass: re-parse ERROR chunks after stripping #-lines ──────
+    # ── warn about remaining ERROR nodes ──────────────────────────────
     error_nodes = [n for n in root_node.children if n.type == "ERROR"]
-    for err_node in error_nodes:
-        err_text = err_node.text.decode()
-        if "(" not in err_text or "{" not in err_text:
-            continue
-        cleaned = re.sub(r"^[ \t]*#.*$", "", err_text, flags=re.MULTILINE)
-        rescued_tree = parser.parse(bytes(cleaned, "utf8"))
-        rescued_stack = [rescued_tree.root_node]
-        while rescued_stack:
-            rnode = rescued_stack.pop()
-            if rnode.type == "function_definition":
-                rescued_funcs = _extract_one_function(
-                    rnode, c_file_path, type_refs, global_lookup)
-                if rescued_funcs:
-                    functions.extend(rescued_funcs)
-            else:
-                for child in rnode.children:
-                    rescued_stack.append(child)
-
-    # ── region-based rescue pass ─────────────────────────────────────────
-    # When #if/#ifdef blocks fragment the parse tree into many small nodes
-    # (rather than one clean ERROR node), the per-ERROR rescue above cannot
-    # recover anything.  Instead, find gaps between properly parsed
-    # function_definition nodes, strip #-lines from each gap, and re-parse
-    # the gap in isolation — avoiding cascading brace errors.
-    if error_nodes and _HAS_PREPROC_CONDITIONAL.search(code):
-        # Collect byte ranges of properly parsed functions
-        func_ranges = sorted(
-            (c.start_byte, c.end_byte)
-            for c in root_node.children
-            if c.type == "function_definition"
-        )
-        known_names = {fn["name"] for fn in functions}
-
-        # Build gap regions (text between function definitions)
-        gaps = []
-        prev_end = 0
-        for start, end in func_ranges:
-            if start > prev_end:
-                gaps.append(code[prev_end:start])
-            prev_end = end
-        if prev_end < len(code):
-            gaps.append(code[prev_end:])
-
-        for gap_text in gaps:
-            if "(" not in gap_text or "{" not in gap_text:
-                continue
-            cleaned = re.sub(r"^[ \t]*#.*$", "", gap_text, flags=re.MULTILINE)
-            gap_tree = parser.parse(bytes(cleaned, "utf8"))
-            gap_stack = [gap_tree.root_node]
-            while gap_stack:
-                rnode = gap_stack.pop()
-                if rnode.type == "function_definition":
-                    rescued_funcs = _extract_one_function(
-                        rnode, c_file_path, type_refs, global_lookup)
-                    if rescued_funcs:
-                        for rf in rescued_funcs:
-                            if rf["name"] not in known_names:
-                                functions.append(rf)
-                                known_names.add(rf["name"])
-                else:
-                    for child in rnode.children:
-                        gap_stack.append(child)
+    if error_nodes:
+        lines = [
+            "%s: %d parse error(s) after preprocessing:" % (c_file_path, len(error_nodes))
+        ]
+        for i, en in enumerate(error_nodes, 1):
+            lineno = en.start_point[0] + 1  # tree-sitter row is 0-based
+            text = en.text.decode(errors="replace")
+            top_lines = text.split("\n")[:3]
+            snippet = "\n    ".join(
+                ln.strip()[:80] for ln in top_lines if ln.strip()
+            )
+            if not snippet:
+                snippet = "(empty)"
+            lines.append("  error %d (line %d):" % (i, lineno))
+            lines.append("    %s" % snippet)
+        lines.append("  hint: try --define to activate guarded preprocessor regions")
+        logger.warning("\n".join(lines))
 
     return functions
 
@@ -502,7 +553,7 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
 
 
 # 分析c文件
-def scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=None):
+def scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=None, defines=None):
     """Scan .c files and return a list of function dicts (no cache I/O)."""
     c_files = collect_source_files(project_dir, (".c",))
     if analyse_dirs is not None:
@@ -516,7 +567,7 @@ def scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=None):
     global_lookup = build_global_lookup(global_vars)
     all_functions = []
     for cf in c_files:
-        funcs = extract_functions_from_c_file(cf, type_refs, global_lookup)
+        funcs = extract_functions_from_c_file(cf, type_refs, global_lookup, defines=defines)
         all_functions.extend(funcs)
 
     # Resolve called_by

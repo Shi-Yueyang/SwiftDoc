@@ -70,6 +70,10 @@ def load_toml(path: str) -> dict:
     config["ignore_types"] = ignore.get("types")
     config["ignore_kinds"] = ignore.get("kinds")
 
+    # [define] section
+    define = raw.get("define", {})
+    config["define_macros"] = define.get("macros")
+
     return config
 
 

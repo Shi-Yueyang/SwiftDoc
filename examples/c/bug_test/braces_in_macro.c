@@ -1,18 +1,30 @@
 void braces_inbalance_without_macro()
 {
 
-#ifdef SOME_MACRO
-    if(1){
+#ifdef MA
+    while(1){
+        if(1){}
 #endif
-
-#ifdef OTHER_MACRO
-    if(1){
+#ifdef MB
+    {
+        if(1){}
 #endif
         printf("");
     }
+
+    
 }
 
-void func_after(){}
+void func_after(){
+    if(1){
+        if(1){
+            switch(a){
+                default:
+                break;
+            }
+        }
+    }
+}
 
 void another_braces_inblance()
 {

@@ -51,6 +51,7 @@ def run_extract_phase(args):
     project_root = os.path.normpath(args.root_dir)
     analysis_paths = build_analysis_paths(args.cache_dir, project_root)
     analyse_dirs = getattr(args, "analyse_dirs", None)
+    defines = getattr(args, "defines", None)
 
     # --- Globals ---
     global_vars = parser.extract_globals(project_root, analyse_dirs=analyse_dirs)
@@ -73,6 +74,7 @@ def run_extract_phase(args):
         global_vars=global_vars,
         enable_ai=enable_ai,
         analyse_dirs=analyse_dirs,
+        defines=defines,
     )
 
     logger.info(colorize_extract_phase_message("Analysis completed.", EXTRACT_PHASE_DONE_COLOR))

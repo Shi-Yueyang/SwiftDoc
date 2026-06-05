@@ -26,6 +26,7 @@ class BaseParser(ABC):
         global_vars: list[GlobalVar],
         enable_ai: bool = True,
         analyse_dirs: list[str] | None = None,
+        defines: set | None = None,
     ) -> list[FuncDef]:
         """Parse source files, refresh cache, and return function dicts."""
         ...
