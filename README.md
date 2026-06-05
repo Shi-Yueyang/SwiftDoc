@@ -52,7 +52,7 @@ swift-doc generate examples/c --ai on
 | `--ai` | `off` | `on` / `off` for AI-generated descriptions |
 | `--format` | `docx` | Output format (`markdown`, `docx`) |
 | `--group-by` | `file` | Group docs per `function` or per `file` |
-| `--style` | `plain` | Call-graph style (`plain` black/white, `modern` colorful, or `table` inline) |
+| `--style` | `plain` | Call-graph style (`plain` black/white, or `table` inline) |
 | `--ignore-kinds` | — | Type kinds to exclude: typedef, enum, struct, union (repeatable) |
 | `--ignore-calls` | — | Function names to exclude from call graphs (repeatable) |
 | `--ignore-types` | — | Type names to exclude from extraction (repeatable) |
@@ -137,7 +137,7 @@ src/
 ├── generators/
 │   ├── markdown/                 # markdown output
 │   ├── docx/                     # docx output
-│   └── images.py                 # call-graph renderer (matplotlib)
+│   └── images.py                 # call-graph renderer (Pillow)
 
 examples/
 ├── c/                            # sample C project

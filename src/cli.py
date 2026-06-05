@@ -123,7 +123,6 @@ def configure_logging(verbose=False):
         else "%(levelname)s %(message)s"
     )
     logging.basicConfig(level=level, format=fmt, force=True)
-    logging.getLogger("matplotlib").setLevel(logging.INFO)
     logging.getLogger("PIL").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -145,7 +144,7 @@ def build_parser(default_cache_dir):
     examples = """Examples:
   Generate documentation:
     swift-doc generate examples/c
-    swift-doc generate examples/c --lang c --style modern
+    swift-doc generate examples/c --lang c --style plain
     swift-doc generate my-config.toml
     swift-doc generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
     swift-doc generate examples/c --ignore-calls free --ignore-calls malloc
@@ -175,7 +174,7 @@ def build_parser(default_cache_dir):
 
     generate_examples = """Examples:
     swift-doc generate examples/c
-    swift-doc generate examples/c --lang c --style modern
+    swift-doc generate examples/c --lang c --style plain
     swift-doc generate my-config.toml
     swift-doc generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
     swift-doc generate examples/c --group-by file --format markdown
@@ -235,7 +234,7 @@ def build_parser(default_cache_dir):
     )
     generate_parser.add_argument(
         "--style",
-        choices=["modern", "plain", "table"],
+        choices=["plain", "slate", "fearless", "red", "table"],
         default=argparse.SUPPRESS,
         help="Graph plotting style (default: plain)",
     )

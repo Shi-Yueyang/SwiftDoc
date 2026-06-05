@@ -34,7 +34,6 @@ class TestConfigureLogging:
 
     def test_third_party_loggers_are_suppressed(self):
         configure_logging(verbose=True)
-        assert logging.getLogger("matplotlib").level == logging.INFO
         assert logging.getLogger("PIL").level == logging.INFO
         assert logging.getLogger("httpx").level == logging.WARNING
         assert logging.getLogger("httpcore").level == logging.WARNING

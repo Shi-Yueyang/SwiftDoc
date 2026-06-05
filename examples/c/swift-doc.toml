@@ -11,7 +11,7 @@ lang = "c"                  # "auto" | "c" | "ada"
 output_folder = "out"       # where generated docs land
 format = "docx"             # "docx" | "markdown"
 group_by = "file"           # "file" | "function"
-style = "plain"             # "plain" | "modern"
+style = "plain"
 
 # --- Extraction options ---
 ai = "off"                  # "off" | "on"

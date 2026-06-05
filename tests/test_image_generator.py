@@ -42,17 +42,16 @@ class TestEstimateTextUnits:
 class TestGetBoxWidth:
     def test_minimum_width(self):
         width = get_box_width("x")
-        assert width >= 2.0
+        assert width >= 0.3
 
     def test_longer_text_wider(self):
         short = get_box_width("a")
         long = get_box_width("a_very_long_function_name")
         assert long > short
 
-    def test_accepts_custom_char_width(self):
-        long_text = "a_very_long_function_name_with_underscores"
-        w1 = get_box_width(long_text, char_width=0.05, min_width=1.0)
-        w2 = get_box_width(long_text, char_width=0.2, min_width=1.0)
+    def test_padding_increases_width(self):
+        w1 = get_box_width("hello", padding=0.1)
+        w2 = get_box_width("hello", padding=0.5)
         assert w2 > w1
 
     def test_larger_fontsize_produces_wider_box(self):
@@ -61,9 +60,9 @@ class TestGetBoxWidth:
         w2 = get_box_width(text, fontsize=16)
         assert w2 > w1
 
-    def test_fontsize_scales_min_width(self):
-        w1 = get_box_width("x", fontsize=11, min_width=3.0)
-        w2 = get_box_width("x", fontsize=22, min_width=3.0)
+    def test_min_width_floors_small_text(self):
+        w1 = get_box_width("x", min_width=1.0)
+        w2 = get_box_width("x", min_width=3.0)
         assert w2 > w1
 
 

@@ -1,16 +1,16 @@
 """
 Generate call-graph diagrams for each function.
-Layout: callers (left) → current function (center) → callees (right).
+Layout: callers (left) -> current function (center) -> callees (right).
+
+Rendered with Pillow -- no matplotlib dependency.
 """
 
 import json
 import os
 import logging
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.patheffects as path_effects
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import platform
+
+from PIL import Image, ImageDraw, ImageFont
 
 from core.utils import iter_progress
 
@@ -18,32 +18,8 @@ from core.utils import iter_progress
 logger = logging.getLogger(__name__)
 
 STYLES = {
-    "modern": {
-        "background_color": "#f3f6fb",
-        "panel_color": "#e8eef9",
-        "center_fill": "#111827",
-        "center_edge": "#1f2937",
-        "center_text": "#f8fafc",
-        "caller_fill": "#fff1f2",
-        "caller_edge": "#fb7185",
-        "caller_text": "#881337",
-        "caller_line": "#e11d48",
-        "callee_fill": "#eff6ff",
-        "callee_edge": "#60a5fa",
-        "callee_text": "#1e3a8a",
-        "callee_line": "#2563eb",
-        "card_shadow": (0, -3),
-        "use_shadow": True,
-        "rounding_size": 0.18,
-        "panel_rounding_size": 0.25,
-        "card_linewidth": 1.8,
-        "arrow_linewidth": 2.8,
-        "shadow_alpha": 0.08,
-        "path_shadow_alpha": 0.10,
-    },
     "plain": {
         "background_color": "#ffffff",
-        "panel_color": "#ffffff",
         "center_fill": "#ffffff",
         "center_edge": "#000000",
         "center_text": "#000000",
@@ -55,20 +31,120 @@ STYLES = {
         "callee_edge": "#000000",
         "callee_text": "#000000",
         "callee_line": "#000000",
-        "card_shadow": (0, -3),
-        "use_shadow": False,
         "rounding_size": 0.0,
-        "panel_rounding_size": 0.0,
-        "card_linewidth": 1.0,
-        "arrow_linewidth": 1.0,
-        "shadow_alpha": 0.0,
-        "path_shadow_alpha": 0.0,
+        "card_linewidth": 1,
+        "arrow_linewidth": 1,
+    },
+    "slate": {
+        "background_color": "#f8fafc",
+        "center_fill": "#1e293b",
+        "center_edge": "#1e293b",
+        "center_text": "#f8fafc",
+        "caller_fill": "#fff1f2",
+        "caller_edge": "#e11d48",
+        "caller_text": "#881337",
+        "caller_line": "#f43f5e",
+        "callee_fill": "#eff6ff",
+        "callee_edge": "#3b82f6",
+        "callee_text": "#1e3a8a",
+        "callee_line": "#60a5fa",
+        "rounding_size": 0.15,
+        "card_linewidth": 2,
+        "arrow_linewidth": 2,
+    },
+    "fearless": {
+        "background_color": "#fef9ef",
+        "center_fill": "#ffffff",
+        "center_edge": "#b8860b",
+        "center_text": "#5c3d0e",
+        "caller_fill": "#ffffff",
+        "caller_edge": "#daa520",
+        "caller_text": "#5c3d0e",
+        "caller_line": "#cd9b1d",
+        "callee_fill": "#ffffff",
+        "callee_edge": "#8b6914",
+        "callee_text": "#5c3d0e",
+        "callee_line": "#a67c1e",
+        "rounding_size": 0.12,
+        "card_linewidth": 2,
+        "arrow_linewidth": 2,
+    },
+    "red": {
+        "background_color": "#fefcfb",
+        "center_fill": "#fffaf7",
+        "center_edge": "#991b1b",
+        "center_text": "#450a0a",
+        "caller_fill": "#ffffff",
+        "caller_edge": "#dc2626",
+        "caller_text": "#7f1d1d",
+        "caller_line": "#ef4444",
+        "callee_fill": "#ffffff",
+        "callee_edge": "#7f1d1d",
+        "callee_text": "#450a0a",
+        "callee_line": "#991b1b",
+        "rounding_size": 0.1,
+        "card_linewidth": 2,
+        "arrow_linewidth": 2,
     },
 }
 
 # Max characters per line before wrapping (center / side cards)
-CENTER_WRAP = 28
+CENTER_WRAP = 35
 SIDE_WRAP = 22
+
+# Pixels per data-unit — matches DPI * 1.5 used in generate_function_graphs
+PX_PER_UNIT = 270
+
+
+def _measure_text_px(text, fontsize, bold=False):
+    """Return (width, height) in pixels for *text* rendered at *fontsize*."""
+    font = _load_font(fontsize, bold=bold)
+    bbox = font.getbbox(text)
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+
+def _hex_to_rgb(hex_color):
+    """Convert '#ffffff' to (255, 255, 255) tuple."""
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _load_font(size, bold=False):
+    """Load a TTF font at the given point size with cross-platform fallback."""
+    system = platform.system()
+    if system == "Linux":
+        name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
+        candidates = [
+            f"/usr/share/fonts/truetype/dejavu/{name}",
+            f"/usr/share/fonts/dejavu/{name}",
+            f"/usr/share/fonts/TTF/{name}",
+        ]
+    elif system == "Windows":
+        if bold:
+            candidates = [
+                "C:\\Windows\\Fonts\\arialbd.ttf",
+                "C:\\Windows\\Fonts\\segoeuib.ttf",
+            ]
+        else:
+            candidates = [
+                "C:\\Windows\\Fonts\\arial.ttf",
+                "C:\\Windows\\Fonts\\segoeui.ttf",
+            ]
+    elif system == "Darwin":
+        candidates = [
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+        ]
+    else:
+        candidates = []
+
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except (IOError, OSError):
+            continue
+
+    return ImageFont.load_default()
 
 
 def _wrap_text(text, max_chars):
@@ -114,91 +190,117 @@ def estimate_text_units(text):
     return weighted_length
 
 
-def get_box_width(text, char_width=0.12, min_width=2.0, padding=0.0, fontsize=11):
-    """Return box width; for multiline text uses the widest line."""
-    scale = fontsize / 11.0
+def get_box_width(text, padding=0.1, min_width=0.3, fontsize=11):
+    """Return box width in data units, sized via Pillow measurement.
+
+    Args:
+        text: Display text (may contain newlines).
+        padding: Extra whitespace in data units added to the measured width.
+        min_width: Floor width in data units.
+        fontsize: Point size of the text font.
+    """
     if "\n" in text:
-        widest = max(estimate_text_units(line) for line in text.split("\n"))
+        widest_px = max(_measure_text_px(line, fontsize)[0] for line in text.split("\n"))
     else:
-        widest = estimate_text_units(text)
-    return max(min_width * scale, widest * char_width * scale)
+        widest_px = _measure_text_px(text, fontsize)[0]
+    return max(min_width, widest_px / PX_PER_UNIT) + padding
 
 
-def get_box_height(fontsize, lines=1):
-    return fontsize * 0.036 * lines
+def get_box_height(fontsize, lines=1, padding=0.2):
+    """Return box height in data units, sized via Pillow measurement."""
+    _, line_h_px = _measure_text_px("Ag", fontsize)
+    return line_h_px * lines / PX_PER_UNIT + padding
 
 
-def draw_card(ax, x, y, width, height, text, fill, edge, text_color, fontsize=11,
-              style=None):
+def draw_card(draw, px, py, pw, ph, text, fill, edge, text_color, fontsize=11,
+              style=None, scale=270):
     """Draw a single function card.
 
     Args:
-        style: The style dict from STYLES (controls shadow, rounding, linewidth).
+        draw: ImageDraw.Draw object.
+        px, py: Card center in pixel coordinates.
+        pw, ph: Card width and height in pixels.
+        text: Display text (may contain newlines).
+        fill, edge, text_color: RGB tuples from _hex_to_rgb.
+        fontsize: Point size for the text.
+        style: The style dict from STYLES.
+        scale: Pixels per data-unit (for converting rounding_size).
     """
     if style is None:
         style = STYLES["plain"]
 
-    if style["use_shadow"]:
-        shadow = FancyBboxPatch(
-            (x - width / 2 + 0.07, y - height / 2 - 0.07),
-            width,
-            height,
-            boxstyle=f"round,pad=0.02,rounding_size={style['rounding_size']}",
-            linewidth=0,
-            facecolor="#0f172a",
-            alpha=style["shadow_alpha"],
-            zorder=1,
+    x1 = px - pw // 2
+    y1 = py - ph // 2
+    x2 = px + pw // 2
+    y2 = py + ph // 2
+
+    rounding = int(style["rounding_size"] * scale)
+    card_linewidth = max(1, int(style["card_linewidth"]))
+
+    if rounding > 0:
+        draw.rounded_rectangle(
+            [x1, y1, x2, y2], radius=rounding,
+            fill=fill, outline=edge, width=card_linewidth,
         )
-        ax.add_patch(shadow)
+    else:
+        draw.rectangle(
+            [x1, y1, x2, y2],
+            fill=fill, outline=edge, width=card_linewidth,
+        )
 
-    card = FancyBboxPatch(
-        (x - width / 2, y - height / 2),
-        width,
-        height,
-        boxstyle=f"round,pad=0.02,rounding_size={style['rounding_size']}",
-        linewidth=style["card_linewidth"],
-        edgecolor=edge,
-        facecolor=fill,
-        zorder=3,
-    )
-    if style["use_shadow"]:
-        card.set_path_effects([
-            path_effects.withSimplePatchShadow(offset=style["card_shadow"], alpha=style["path_shadow_alpha"]),
-            path_effects.Normal(),
-        ])
-    ax.add_patch(card)
-    ax.text(
-        x,
-        y,
-        text,
-        ha="center",
-        va="center",
-        fontsize=fontsize,
-        color=text_color,
-        fontweight="semibold",
-        zorder=4,
-    )
+    # Draw centered text
+    font = _load_font(fontsize, bold=False)
+    draw.text((px, py), text, fill=text_color, font=font, anchor="mm")
 
 
-def draw_connector(ax, start, end, color, linewidth=2.8):
-    arrow = FancyArrowPatch(
-        start,
-        end,
-        arrowstyle="-|>",
-        mutation_scale=18,
-        linewidth=linewidth,
-        color=color,
-        connectionstyle="arc3,rad=0.0",
-        capstyle="round",
-        joinstyle="round",
-        zorder=2,
-    )
-    ax.add_patch(arrow)
+def draw_connector(draw, start, end, color, linewidth=1):
+    """Draw a line with a triangular arrowhead from *start* to *end*.
 
+    Args:
+        draw: ImageDraw.Draw object.
+        start, end: (x, y) pixel coordinate tuples.
+        color: RGB tuple.
+        linewidth: Line thickness in pixels.
+    """
+    sx, sy = start
+    ex, ey = end
+
+    dx = ex - sx
+    dy = ey - sy
+    length = (dx * dx + dy * dy) ** 0.5
+    if length < 1:
+        return
+
+    nx = dx / length
+    ny = dy / length
+
+    arrow_size = 20 + linewidth * 2
+    lw = max(1, int(linewidth))
+
+    # Push past nominal endpoints by half linewidth so the square
+    # cap overlaps the card border and blends into the arrowhead.
+    overlap = lw / 2
+    sx_a = sx + nx * overlap
+    sy_a = sy + ny * overlap
+    ex_a = ex - nx * overlap
+    ey_a = ey - ny * overlap
+
+    # Shaft -- stop short of arrowhead tip
+    shaft_end = (ex_a - nx * arrow_size * 0.35, ey_a - ny * arrow_size * 0.35)
+    draw.line([(sx_a, sy_a), shaft_end], fill=color, width=lw)
+
+    # Filled triangle arrowhead
+    px = -ny
+    py = nx
+    tip = (ex, ey)
+    base = (ex - nx * arrow_size, ey - ny * arrow_size)
+    left = (base[0] + px * arrow_size * 0.35, base[1] + py * arrow_size * 0.35)
+    right = (base[0] - px * arrow_size * 0.35, base[1] - py * arrow_size * 0.35)
+    draw.polygon([tip, left, right], fill=color)
 
 
 def generate_function_graphs(json_path=None, output_dir=".analysis/figures", function_list=None,
-                            style="plain"):
+                             style="plain"):
     if function_list is not None:
         functions = function_list
     else:
@@ -215,17 +317,15 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         logger.warning("No function data to generate graphs")
         return
 
-    st = STYLES.get(style, STYLES["modern"])
+    st = STYLES.get(style, STYLES["plain"])
 
     os.makedirs(output_dir, exist_ok=True)
-    plt.rcParams.update({'font.size': 10, 'font.family': 'sans-serif'})
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
-    plt.rcParams['axes.unicode_minus'] = False
 
-    CENTER_FS = 16
-    SIDE_FS = 13
+    CENTER_FS = 12
+    SIDE_FS = 12
     gap = 0.6
-    y_step = 0.42
+    DPI = 200
+    SCALE = 1.5 * DPI  # pixels per data-unit
 
     for idx, total, func in iter_progress(functions, "Generating graphs"):
         fname = func.get("name", "unknown")
@@ -235,13 +335,13 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
         logger.debug("(%s/%s) Generating: %s", idx, total, fname)
 
         fname_display = _wrap_text(fname, CENTER_WRAP)
-        center_height = get_box_height(CENTER_FS, lines=fname_display.count("\n") + 1)
+        center_height = get_box_height(CENTER_FS, lines=fname_display.count("\n") + 1,padding=0.2)
         side_height = get_box_height(SIDE_FS)
 
         wrapped = {fname: fname_display}
         box_widths = {}
         box_heights = {}
-        box_widths[fname] = get_box_width(fname_display, min_width=2.8, padding=0.0, fontsize=CENTER_FS)
+        box_widths[fname] = get_box_width(fname_display, min_width=1.5, padding=0, fontsize=CENTER_FS)
         box_heights[fname] = center_height
         for c in callers:
             wtext = _wrap_text(c, SIDE_WRAP)
@@ -286,8 +386,6 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
             cy -= h + callee_gap
             pos[c] = (x, y)
 
-        max_h = max(len(callers), len(callees), 1)
-
         # Compute actual vertical extent from positions + box heights
         all_y_edges = []
         for node_name, (_, py) in pos.items():
@@ -295,84 +393,91 @@ def generate_function_graphs(json_path=None, output_dir=".analysis/figures", fun
             all_y_edges.append(py - h / 2)
             all_y_edges.append(py + h / 2)
 
-        total_height = (max(all_y_edges) - min(all_y_edges)) if all_y_edges else 1.0
-        fig, ax = plt.subplots(figsize=(14, max(5.0, total_height * 1.3)))
-        fig.patch.set_facecolor(st["background_color"])
-        ax.set_facecolor(st["background_color"])
-
         horizontal_edges = []
         for node_name, (x, _) in pos.items():
             horizontal_edges.append(x - box_widths[node_name] / 2)
             horizontal_edges.append(x + box_widths[node_name] / 2)
-        min_x = min(horizontal_edges) - 0.6
-        max_x = max(horizontal_edges) + 0.6
-        min_y = min(all_y_edges) - 0.5
-        max_y = max(all_y_edges) + 0.5
+        min_x = min(horizontal_edges) - 0.1
+        max_x = max(horizontal_edges) + 0.1
+        min_y = min(all_y_edges) - 0.1
+        max_y = max(all_y_edges) + 0.1
 
-        panel = FancyBboxPatch(
-            (min_x + 0.15, min_y + 0.15),
-            max_x - min_x - 0.3,
-            max_y - min_y - 0.3,
-            boxstyle=f"round,pad=0.02,rounding_size={st['panel_rounding_size']}",
-            linewidth=0,
-            facecolor=st["panel_color"],
-            alpha=0.55,
-            zorder=0,
-        )
-        ax.add_patch(panel)
+        # --- Pixel-space rendering ---
+        margin_x_d = 0.1
+        margin_y_d = 0.1
+        px_min_x = min_x - margin_x_d
+        px_max_x = max_x + margin_x_d
+        px_min_y = min_y - margin_y_d
+        px_max_y = max_y + margin_y_d
 
-        draw_card(
-            ax, pos[fname][0], pos[fname][1],
-            box_widths[fname], box_heights[fname], wrapped[fname],
-            st["center_fill"], st["center_edge"], st["center_text"],
-            fontsize=CENTER_FS, style=st,
-        )
+        img_w = max(100, int((px_max_x - px_min_x) * SCALE))
+        img_h = max(100, int((px_max_y - px_min_y) * SCALE))
 
+        bg_rgb = _hex_to_rgb(st["background_color"])
+        img = Image.new("RGB", (img_w, img_h), bg_rgb)
+        draw = ImageDraw.Draw(img)
+
+        def _to_px(*args):
+            """Convert data coordinates to pixel coordinates.
+
+            Accepts either _to_px(x, y) or _to_px((x, y)).
+            """
+            if len(args) == 1:
+                x, y = args[0]
+            else:
+                x, y = args
+            return (int((x - px_min_x) * SCALE), int((y - px_min_y) * SCALE))
+
+        # Center function card
+        cpx, cpy = _to_px(pos[fname])
+        cpw = int(box_widths[fname] * SCALE)
+        cph = int(box_heights[fname] * SCALE)
+        draw_card(draw, cpx, cpy, cpw, cph, wrapped[fname],
+                  _hex_to_rgb(st["center_fill"]), _hex_to_rgb(st["center_edge"]),
+                  _hex_to_rgb(st["center_text"]), fontsize=CENTER_FS,
+                  style=st, scale=SCALE)
+
+        # Callers + connectors
         if callers:
             for c in callers:
-                x0, y0 = pos[c]
-                ch = box_heights.get(c, side_height)
-                draw_card(
-                    ax, x0, y0,
-                    box_widths[c], ch, wrapped.get(c, c),
-                    st["caller_fill"], st["caller_edge"], st["caller_text"],
-                    fontsize=SIDE_FS, style=st,
-                )
-                draw_connector(
-                    ax,
-                    (x0 + box_widths[c] / 2, y0),
-                    (-mid_w / 2 - 0.18, 0),
-                    st["caller_line"],
-                    linewidth=st["arrow_linewidth"],
-                )
+                cx, cy_data = pos[c]
+                pcx, pcy = _to_px(cx, cy_data)
+                pcw = int(box_widths[c] * SCALE)
+                pch = int(box_heights.get(c, side_height) * SCALE)
+                draw_card(draw, pcx, pcy, pcw, pch, wrapped.get(c, c),
+                          _hex_to_rgb(st["caller_fill"]), _hex_to_rgb(st["caller_edge"]),
+                          _hex_to_rgb(st["caller_text"]), fontsize=SIDE_FS,
+                          style=st, scale=SCALE)
 
+                conn_start = _to_px(cx + box_widths[c] / 2, cy_data)
+                conn_end = _to_px(-mid_w / 2 , 0)
+                draw_connector(draw, conn_start, conn_end,
+                               _hex_to_rgb(st["caller_line"]),
+                               linewidth=st["arrow_linewidth"])
+
+        # Callees + connectors
         if callees:
             for c in callees:
-                x1, y1 = pos[c]
-                ch = box_heights.get(c, side_height)
-                draw_card(
-                    ax, x1, y1,
-                    box_widths[c], ch, wrapped.get(c, c),
-                    st["callee_fill"], st["callee_edge"], st["callee_text"],
-                    fontsize=SIDE_FS, style=st,
-                )
-                draw_connector(
-                    ax,
-                    (mid_w / 2 + 0.18, 0),
-                    (x1 - box_widths[c] / 2, y1),
-                    st["callee_line"],
-                    linewidth=st["arrow_linewidth"],
-                )
+                cx, cy_data = pos[c]
+                pcx, pcy = _to_px(cx, cy_data)
+                pcw = int(box_widths[c] * SCALE)
+                pch = int(box_heights.get(c, side_height) * SCALE)
+                draw_card(draw, pcx, pcy, pcw, pch, wrapped.get(c, c),
+                          _hex_to_rgb(st["callee_fill"]), _hex_to_rgb(st["callee_edge"]),
+                          _hex_to_rgb(st["callee_text"]), fontsize=SIDE_FS,
+                          style=st, scale=SCALE)
 
-        ax.set_xlim(min_x, max_x)
-        ax.set_ylim(min_y, max_y)
-        ax.axis('off')
-        plt.tight_layout()
+                conn_start = _to_px(mid_w / 2 , 0)
+                conn_end = _to_px(cx - box_widths[c] / 2, cy_data)
+                draw_connector(draw, conn_start, conn_end,
+                               _hex_to_rgb(st["callee_line"]),
+                               linewidth=st["arrow_linewidth"])
 
+        # Save
         safe_name = fname.replace('\\', '_').replace('/', '_').replace(':', '_')
         out_path = os.path.join(output_dir, f"{safe_name}.png")
-        plt.savefig(out_path, dpi=180, facecolor=fig.get_facecolor(), bbox_inches='tight')
-        plt.close()
+        img.info["dpi"] = (DPI, DPI)
+        img.save(out_path)
 
 
 def main():

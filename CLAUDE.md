@@ -30,10 +30,9 @@ See [README.md](README.md) for build, test, and CLI commands.
 - `manager.py` — AI config stored per-platform in `swift-doc/config.json` (Windows: `%APPDATA%\swift-doc\`, macOS: `~/Library/Application Support/swift-doc/`, Linux: `~/.config/swift-doc/`). Required keys: `api_key`, `base_url`, `model_name`. Optional: `temperature` (default 1.0), `max_tokens` (default 800), `retry_count` (default 1). `STATE_DIR` is the config directory path. `APP_DIR_NAME = "swift-doc"`.
 - `toml_config.py` — Project-level TOML config (`swift-doc.toml`). `load_toml(path)` parses a config file, `find_config(dir)` looks for `swift-doc.toml` in a directory. `DEFAULT_CONFIG_NAME = "swift-doc.toml"`.
 
-**Call-graph rendering** (`generators/images.py`): Three `--style` options:
-- `"plain"` (default) — matplotlib black/white, no shadows, sharp edges, thin lines
-- `"modern"` — matplotlib colorful with shadows, rounded corners, blue-gray backgrounds
-- `"table"` — no matplotlib; embeds a two-column markdown/docx table (Callers | Callees) directly in the document. Self-calls are filtered out.
+**Call-graph rendering** (`generators/images.py`): Two `--style` options:
+- `"plain"` (default) — Pillow-rendered black/white, no shadows, sharp edges, thin lines
+- `"table"` — embeds a two-column markdown/docx table (Callers | Callees) directly in the document. Self-calls are filtered out.
 
 Long function names use `_wrap_text()` (underscore-aware line breaking) instead of truncation. Cards auto-size to fit wrapped text. Self-calls are stripped from callers/callees lists at render time.
 
