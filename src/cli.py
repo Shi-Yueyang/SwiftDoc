@@ -251,6 +251,12 @@ def build_parser(default_cache_dir):
         default=argparse.SUPPRESS,
         help="Type names to exclude from extraction (repeatable)",
     )
+    generate_parser.add_argument(
+        "--ignore-kinds",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Type kinds to exclude: typedef, enum, struct, union (repeatable)",
+    )
 
     config_examples = """Examples:
     swift-doc config
@@ -364,6 +370,10 @@ def main():
         toml_ignore_types = toml_config.get("ignore_types") if toml_config else None
         ignore_types = set(cli_ignore_types or toml_ignore_types or [])
 
+        cli_ignore_kinds = getattr(cli_args, "ignore_kinds", None)
+        toml_ignore_kinds = toml_config.get("ignore_kinds") if toml_config else None
+        ignore_kinds = cli_ignore_kinds or toml_ignore_kinds or []
+
         # -- validate --
         try:
             validate_paths(root_dir, analyse_dirs)
@@ -399,6 +409,7 @@ def main():
             language=lang,
             ignore_calls=ignore_calls,
             ignore_types=ignore_types,
+            ignore_kinds=ignore_kinds,
         )
         run_docgen_phase(docgen_args)
 

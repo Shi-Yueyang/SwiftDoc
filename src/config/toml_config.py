@@ -68,6 +68,7 @@ def load_toml(path: str) -> dict:
     ignore = raw.get("ignore", {})
     config["ignore_calls"] = ignore.get("calls")
     config["ignore_types"] = ignore.get("types")
+    config["ignore_kinds"] = ignore.get("kinds")
 
     return config
 

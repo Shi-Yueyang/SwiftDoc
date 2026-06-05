@@ -81,12 +81,15 @@ def _create_document():
     return doc
 
 
-def generate_appendix_docx(types_json_path: str, output_docx_path: str, filter_types: Optional[Set[str]] = None, language: str = "c") -> None:
-    if not os.path.exists(types_json_path):
+def generate_appendix_docx(types_json_path: str, output_docx_path: str, filter_types: Optional[Set[str]] = None, language: str = "c", types_data_override: dict = None) -> None:
+    if types_data_override is not None:
+        data = types_data_override
+    elif os.path.exists(types_json_path):
+        with open(types_json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
         logger.warning("Types cache file not found: %s", types_json_path)
         return
-    with open(types_json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
     type_defs = data.get("type_definitions", {})
     type_refs = data.get("type_references", {})
 

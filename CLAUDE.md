@@ -56,9 +56,12 @@ swift-doc clear-cache --cache_dir .analysis            # clear specific cache
 - `manager.py` — AI config stored per-platform in `swift-doc/config.json` (Windows: `%APPDATA%\swift-doc\`, macOS: `~/Library/Application Support/swift-doc/`, Linux: `~/.config/swift-doc/`). Required keys: `api_key`, `base_url`, `model_name`. Optional: `temperature` (default 1.0), `max_tokens` (default 800), `retry_count` (default 1). `STATE_DIR` is the config directory path. `APP_DIR_NAME = "swift-doc"`.
 - `toml_config.py` — Project-level TOML config (`swift-doc.toml`). `load_toml(path)` parses a config file, `find_config(dir)` looks for `swift-doc.toml` in a directory. `DEFAULT_CONFIG_NAME = "swift-doc.toml"`.
 
-**Call-graph images** (`generators/images.py`): matplotlib-based renderer with a `STYLES` dict:
-- `"plain"` (default) — black/white, no shadows, sharp edges, thin lines
-- `"modern"` — colorful with shadows, rounded corners, blue-gray backgrounds
+**Call-graph rendering** (`generators/images.py`): Three `--style` options:
+- `"plain"` (default) — matplotlib black/white, no shadows, sharp edges, thin lines
+- `"modern"` — matplotlib colorful with shadows, rounded corners, blue-gray backgrounds
+- `"table"` — no matplotlib; embeds a two-column markdown/docx table (Callers | Callees) directly in the document. Self-calls are filtered out.
+
+Long function names use `_wrap_text()` (underscore-aware line breaking) instead of truncation. Cards auto-size to fit wrapped text. Self-calls are stripped from callers/callees lists at render time.
 
 **Data types** (`parsers/types.py`): TypedDict definitions for `GlobalVar`, `TypeDef`, `TypesData`, `FuncInput`, `FuncReturn`, `FuncDef` — these are the canonical shapes passed between parser, AI, compare, and generator modules.
 
@@ -85,14 +88,16 @@ ai = "off"
 [ignore]
 calls = ["memcpy", "memset"]
 types = ["noisy_type"]
+kinds = []
 ```
 
 CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distinguish "not passed" from "passed with default value." Merge happens in `cli.py:_resolve()`.
 
 ## Ignore Filtering
 
-- `--ignore-calls` / `[ignore] calls` — filters function names from `calls` lists (not `called_by`). Applied at **docgen time** — cache stores complete data. Changing ignore lists never invalidates cache.
-- `--ignore-types` / `[ignore] types` — strips type names from `type_refs` and clears `type_ref` on global-variable inputs. Also applied at **docgen time**.
+- `--ignore-calls` / `[ignore] calls` — filters function names from `calls` lists (not `called_by`). Applied at **docgen time** — cache stores complete data.
+- `--ignore-types` / `[ignore] types` — strips type names from `type_refs` and clears `type_ref` on global-variable inputs. Applied at **docgen time**.
+- `--ignore-kinds` / `[ignore] kinds` — drops types whose `kind` field matches (typedef, enum, struct, union). Default: empty (no filtering). Applied at **docgen time**.
 - Hardcoded baseline at extraction time: `_IGNORED_CALLS = {"memcpy", "memset"}` in `parsers/c/functions.py` — these are always filtered.
 
 ## Key Conventions
@@ -128,7 +133,9 @@ CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distin
 3. **Subscript writes** (`arr[0] = x`): `is_identifier_written()` must walk up through `subscript_expression`, `field_expression`, `pointer_expression` chain to find the enclosing `assignment_expression`.
 4. **Cast vs call**: `(TypeName)(expr)` is parsed as `call_expression`. `_is_cast_expression()` detects when the "function" is a `parenthesized_expression` wrapping a bare `identifier` — skip it.
 5. **Pointer types**: `child_by_field_name("type")` only returns the base type. Pointer stars live in `pointer_declarator` children — must collect them separately.
-6. **Global variable direction**: Must be three-way: `in` (read-only), `out` (write-only), `in out` (both). Old code only had `in`/`in out`.
+6. **Global variable direction**: Two values: `in` (read-only) or `in out` (written at all). No `out`-only for globals.
+7. **Pointer parameter direction**: Three-way: `in` (read-only), `out` (write-only), `in out` (both read and written).
+8. **Preprocessor-broken functions (rescue pass)**: `#ifdef` blocks with unbalanced braces produce ERROR nodes. The rescue pass in `extract_functions_from_c_file()` strips `#`-lines from ERROR text and re-parses — recovering functions that would otherwise be invisible. `_extract_one_function()` is shared by both the normal walk and the rescue pass.
 
 ## Communication Style
 

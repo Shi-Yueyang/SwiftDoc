@@ -25,5 +25,7 @@ ai = "off"                  # "off" | "on"
 [ignore]
 # Function calls to exclude from call graphs (memcpy & memset are always ignored)
 calls = []
-# Type names to skip during global type extraction
+# Type names to skip
 types = []
+# Type kinds to skip: typedef, enum, struct, union (empty = keep all)
+kinds = []

@@ -337,106 +337,120 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup):
     while outer_stack:
         node = outer_stack.pop()
         if node.type == "function_definition":
-            declarator_node = node.child_by_field_name("declarator")
-            if declarator_node is None:
-                continue
-            func_name_node = find_identifier(declarator_node)
-            if func_name_node is None:
-                continue
-            function_name = get_node_text(func_name_node)
-
-            body_node = node.child_by_field_name("body")
-            body_code = ""
-            if body_node:
-                full_body_text = get_node_text(body_node)
-                if full_body_text.startswith("{") and full_body_text.endswith("}"):
-                    body_code = full_body_text[1:-1].strip()
-                else:
-                    body_code = full_body_text.strip()
-                body_code = clean_function_body(body_code)
-
-            normalized_body = normalize_c_code(body_code) if body_code else ""
-
-            params = find_parameters(declarator_node)
-            inputs = []
-            pointer_params = set()
-            for p in params:
-                inputs.append(
-                    {
-                        "name": p["name"],
-                        "kind": "parameter",
-                        "direction": "in",
-                        "type": p["type"],
-                        "type_ref": "",
-                    }
-                )
-                if "*" in p["type"]:
-                    pointer_params.add(p["name"])
-
-            # Analyze pointer parameter directions from body usage
-            pointer_directions = _analyze_pointer_directions(body_node, pointer_params)
-            for inp in inputs:
-                if inp["name"] in pointer_directions:
-                    inp["direction"] = pointer_directions[inp["name"]]
-
-            if body_node:
-                global_written = set()
-                global_read = set()
-                referenced_globals = {}
-                global_stack = [body_node]
-                while global_stack:
-                    gnode = global_stack.pop()
-                    if gnode.type == "identifier":
-                        name = get_node_text(gnode)
-                        global_info = resolve_global_info(global_lookup, c_file_path, name)
-                        if global_info is not None:
-                            referenced_globals[name] = global_info
-                            if is_identifier_written(gnode):
-                                global_written.add(name)
-                            else:
-                                global_read.add(name)
-                    else:
-                        for sub in gnode.children:
-                            global_stack.append(sub)
-
-                for gname in global_read | global_written:
-                    ginfo = referenced_globals[gname]
-                    gtype = ginfo["type"]
-                    direction = "in out" if gname in global_written else "in"
-                    type_ref = get_type_ref(gtype, type_refs)
-                    if type_ref is None:
-                        type_ref = ""
-                    inputs.append(
-                        {
-                            "name": gname,
-                            "kind": "Global variable",
-                            "direction": direction,
-                            "type": gtype,
-                            "type_ref": type_ref,
-                        }
-                    )
-
-            return_type = _extract_return_type(node)
-            return_exprs = find_return_statements(body_node)
-            calls = extract_calls_from_body(body_node)
-            calls = [c for c in calls if c not in _IGNORED_CALLS]
-
-            functions.append(
-                {
-                    "name": function_name,
-                    "file": c_file_path,
-                    "return_type": return_type,
-                    "inputs": inputs,
-                    "returns": return_exprs,
-                    "body_code": body_code,
-                    "normalized_body": normalized_body,
-                    "calls": calls,
-                }
-            )
+            result = _extract_one_function(node, c_file_path, type_refs, global_lookup)
+            if result:
+                functions.extend(result)
         else:
             for child in node.children:
                 outer_stack.append(child)
+
+    # ── rescue pass: re-parse ERROR chunks after stripping #-lines ──────
+    error_nodes = [n for n in root_node.children if n.type == "ERROR"]
+    for err_node in error_nodes:
+        err_text = err_node.text.decode()
+        if "(" not in err_text or "{" not in err_text:
+            continue
+        cleaned = re.sub(r"^[ \t]*#.*$", "", err_text, flags=re.MULTILINE)
+        rescued_tree = parser.parse(bytes(cleaned, "utf8"))
+        rescued_stack = [rescued_tree.root_node]
+        while rescued_stack:
+            rnode = rescued_stack.pop()
+            if rnode.type == "function_definition":
+                rescued_funcs = _extract_one_function(
+                    rnode, c_file_path, type_refs, global_lookup)
+                if rescued_funcs:
+                    functions.extend(rescued_funcs)
+            else:
+                for child in rnode.children:
+                    rescued_stack.append(child)
+
     return functions
+
+
+def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
+    """Extract a single function_definition node into a function dict.
+
+    Used by both the normal walk and the rescue pass.
+    """
+    declarator_node = func_node.child_by_field_name("declarator")
+    if declarator_node is None:
+        return None
+    func_name_node = find_identifier(declarator_node)
+    if func_name_node is None:
+        return None
+    function_name = get_node_text(func_name_node)
+
+    body_node = func_node.child_by_field_name("body")
+    body_code = ""
+    if body_node:
+        full_body_text = get_node_text(body_node)
+        if full_body_text.startswith("{") and full_body_text.endswith("}"):
+            body_code = full_body_text[1:-1].strip()
+        else:
+            body_code = full_body_text.strip()
+        body_code = clean_function_body(body_code)
+
+    normalized_body = normalize_c_code(body_code) if body_code else ""
+
+    params = find_parameters(declarator_node)
+    inputs = []
+    pointer_params = set()
+    for p in params:
+        inputs.append({
+            "name": p["name"], "kind": "parameter",
+            "direction": "in", "type": p["type"], "type_ref": "",
+        })
+        if "*" in p["type"]:
+            pointer_params.add(p["name"])
+
+    pointer_directions = _analyze_pointer_directions(body_node, pointer_params)
+    for inp in inputs:
+        if inp["name"] in pointer_directions:
+            inp["direction"] = pointer_directions[inp["name"]]
+
+    if body_node:
+        global_written = set()
+        global_read = set()
+        referenced_globals = {}
+        global_stack = [body_node]
+        while global_stack:
+            gnode = global_stack.pop()
+            if gnode.type == "identifier":
+                name = get_node_text(gnode)
+                global_info = resolve_global_info(global_lookup, c_file_path, name)
+                if global_info is not None:
+                    referenced_globals[name] = global_info
+                    if is_identifier_written(gnode):
+                        global_written.add(name)
+                    else:
+                        global_read.add(name)
+            else:
+                for sub in gnode.children:
+                    global_stack.append(sub)
+
+        for gname in global_read | global_written:
+            ginfo = referenced_globals[gname]
+            gtype = ginfo["type"]
+            direction = "in out" if gname in global_written else "in"
+            type_ref = get_type_ref(gtype, type_refs)
+            if type_ref is None:
+                type_ref = ""
+            inputs.append({
+                "name": gname, "kind": "Global variable",
+                "direction": direction, "type": gtype, "type_ref": type_ref,
+            })
+
+    return_type = _extract_return_type(func_node)
+    return_exprs = find_return_statements(body_node)
+    calls = extract_calls_from_body(body_node)
+    calls = [c for c in calls if c not in _IGNORED_CALLS]
+
+    return [{
+        "name": function_name, "file": c_file_path,
+        "return_type": return_type, "inputs": inputs,
+        "returns": return_exprs, "body_code": body_code,
+        "normalized_body": normalized_body, "calls": calls,
+    }]
 
 
 # 分析c文件

@@ -106,12 +106,15 @@ def run_docgen_phase(args):
 
     # Apply type filtering (docgen-time — cache stays unfiltered)
     ignore_types = getattr(args, "ignore_types", None)
-    if ignore_types:
-        ignored_t = set(ignore_types)
+    ignore_kinds = getattr(args, "ignore_kinds", [])
+    if ignore_types or ignore_kinds:
+        ignored_t = set(ignore_types or [])
+        ignored_k = set(ignore_kinds or [])
         type_defs = types_data.get("type_definitions", {})
-        for tname in ignored_t:
-            type_defs.pop(tname, None)
-            type_refs.pop(tname, None)
+        for tname, tdef in list(type_defs.items()):
+            if tname in ignored_t or tdef.get("kind") in ignored_k:
+                type_defs.pop(tname, None)
+                type_refs.pop(tname, None)
 
     if not os.path.exists(functions_json):
         logger.warning("Functions cache file not found: %s", functions_json)
@@ -183,6 +186,8 @@ def run_docgen_phase(args):
 
     appendix_ext = get_format_extension(output_format)
     appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
-    generator.generate_appendix(types_json, appendix_output, filter_types=None, language=getattr(args, "language", "c"))
+    generator.generate_appendix(None, appendix_output, filter_types=None,
+                                language=getattr(args, "language", "c"),
+                                types_data_override=types_data)
 
     logger.info(colorize_extract_phase_message("It's done.", EXTRACT_PHASE_DONE_COLOR))
