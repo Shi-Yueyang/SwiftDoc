@@ -209,6 +209,26 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
     run = p.add_run(f"function：{fname}")
     run.bold = True
 
+    # 模块描述
+    doc.add_heading("模块描述", level=heading_level + 1)
+    file_path = func.get("file", "unknown")
+    start_line = func.get("start_line", 0)
+
+    p = doc.add_paragraph()
+    run = p.add_run("函数名 Function name: ")
+    run.bold = True
+    p.add_run(fname)
+
+    p = doc.add_paragraph()
+    run = p.add_run("文件名 File name: ")
+    run.bold = True
+    p.add_run(file_path)
+
+    p = doc.add_paragraph()
+    run = p.add_run("行号 Line number: ")
+    run.bold = True
+    p.add_run(str(start_line))
+
     _add_input_table(doc, func.get("inputs", []), heading_level + 1)
     _add_output_table(doc, func.get("returns", []), heading_level + 1,
                       return_type=func.get("return_type", ""))

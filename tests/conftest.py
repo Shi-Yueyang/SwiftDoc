@@ -115,6 +115,7 @@ def sample_functions():
         {
             "name": "main",
             "file": "/project/main.c",
+            "start_line": 10,
             "inputs": [
                 {"name": "argc", "kind": "parameter", "direction": "in", "type": "int", "type_ref": ""},
                 {"name": "argv", "kind": "parameter", "direction": "in", "type": "char**", "type_ref": ""},
@@ -130,6 +131,7 @@ def sample_functions():
         {
             "name": "init",
             "file": "/project/main.c",
+            "start_line": 25,
             "inputs": [],
             "returns": [],
             "body_code": "global_mode = 0;",
@@ -141,6 +143,7 @@ def sample_functions():
         {
             "name": "process",
             "file": "/project/main.c",
+            "start_line": 35,
             "inputs": [
                 {"name": "data", "kind": "parameter", "direction": "in", "type": "int", "type_ref": ""},
             ],

@@ -16,6 +16,14 @@ from generators.markdown.appendix import generate_appendix_md
 
 
 class TestNormalizeFunctionForDoc:
+    def test_sets_default_start_line(self):
+        result = normalize_function_for_doc({"name": "foo"})
+        assert result["start_line"] == 0
+
+    def test_preserves_existing_start_line(self):
+        result = normalize_function_for_doc({"name": "foo", "start_line": 42})
+        assert result["start_line"] == 42
+
     def test_sets_default_algorithm_logic(self):
         result = normalize_function_for_doc({"name": "foo"})
         assert result["algorithm_logic"] == ""
@@ -201,6 +209,28 @@ class TestGenerateFunctionMd:
 
         main_md = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
         assert "Entry point" in main_md
+
+    def test_includes_module_description_section(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_output_mod_desc")
+        figures_dir = str(tmp_path / "figures_mod_desc")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            img_path = os.path.join(figures_dir, f"{func['name']}.png")
+            with open(img_path, "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        main_md = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "### 模块描述" in main_md
+        assert "**函数名 Function name:** main" in main_md
+        assert "**文件名 File name:** /project/main.c" in main_md
+        assert "**行号 Line number:** 10" in main_md
 
     # Test with figure reference
     def test_includes_figure_reference(self, sample_functions, sample_types_json, tmp_path):

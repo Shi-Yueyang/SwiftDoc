@@ -80,6 +80,27 @@ class TestGenerateFunctionDocx:
         assert "main" in all_text
         assert "Entry point" in all_text
 
+    def test_includes_module_description_section(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_mod_desc")
+        figures_dir = str(tmp_path / "figures_mod_desc")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        all_text = " ".join(_get_paragraphs_text(doc))
+        assert "模块描述" in all_text
+        assert "函数名 Function name:" in all_text
+        assert "文件名 File name:" in all_text
+        assert "/project/main.c" in all_text
+        assert "行号 Line number:" in all_text
+        assert "10" in all_text
+
     def test_docx_contains_input_table(self, sample_functions, sample_types_json, tmp_path):
         output_dir = str(tmp_path / "docx_output3")
         figures_dir = str(tmp_path / "figures_docx3")

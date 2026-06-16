@@ -78,6 +78,7 @@ def normalize_function_for_doc(func: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(func)
     normalized.setdefault("algorithm_logic", "")
     normalized.setdefault("return_type", "")
+    normalized.setdefault("start_line", 0)
 
     normalized_inputs = []
     for inp in normalized.get("inputs", []):

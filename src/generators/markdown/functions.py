@@ -15,6 +15,18 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
     fname = func.get("name", "unknown_func")
     lines = [f"## {fname}", "", f"**function：{fname}**", ""]
 
+    # 模块描述
+    file_path = func.get("file", "unknown")
+    start_line = func.get("start_line", 0)
+    lines.append("### 模块描述")
+    lines.append("")
+    lines.append(f"**函数名 Function name:** {fname}")
+    lines.append("")
+    lines.append(f"**文件名 File name:** {file_path}")
+    lines.append("")
+    lines.append(f"**行号 Line number:** {start_line}")
+    lines.append("")
+
     inputs = func.get("inputs", [])
 
     # Input table

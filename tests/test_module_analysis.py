@@ -11,6 +11,7 @@ from parsers.c.functions import (
     build_global_lookup,
     resolve_global_info,
     _analyze_pointer_directions,
+    _extract_one_function,
     extract_functions_from_c_file,
 )
 from parsers.common import (
@@ -612,3 +613,49 @@ class TestExtractFunctionsFromCFile:
         # f() should still be found despite the error
         names = {fn["name"] for fn in funcs}
         assert "f" in names
+
+
+class TestExtractStartLine:
+    """Tests for line number extraction from function definitions."""
+
+    def test_extracts_start_line_from_simple_function(self):
+        code = """int add(int a, int b) {
+    return a + b;
+}
+"""
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "add")
+        result = _extract_one_function(func_node, "test.c", {}, _EMPTY_LOOKUP)
+        assert result is not None
+        assert result[0]["start_line"] == 1
+
+    def test_start_line_respects_leading_whitespace(self):
+        code = """
+
+
+int foo(void) {
+    return 42;
+}
+"""
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "foo")
+        result = _extract_one_function(func_node, "test.c", {}, _EMPTY_LOOKUP)
+        assert result is not None
+        assert result[0]["start_line"] == 4
+
+    def test_extract_functions_from_c_file_includes_start_line(self, tmp_dir):
+        code = """int one(void) { return 1; }
+
+int two(void) { return 2; }
+
+int three(void) { return 3; }
+"""
+        path = os.path.join(tmp_dir, "test_lines.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        funcs = extract_functions_from_c_file(path, {}, _EMPTY_LOOKUP)
+        assert len(funcs) == 3
+        by_name = {f["name"]: f for f in funcs}
+        assert by_name["one"]["start_line"] == 1
+        assert by_name["two"]["start_line"] == 3
+        assert by_name["three"]["start_line"] == 5

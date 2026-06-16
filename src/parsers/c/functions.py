@@ -544,8 +544,11 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
     calls = extract_calls_from_body(body_node)
     calls = [c for c in calls if c not in _IGNORED_CALLS]
 
+    start_line = func_node.start_point[0] + 1
+
     return [{
         "name": function_name, "file": c_file_path,
+        "start_line": start_line,
         "return_type": return_type, "inputs": inputs,
         "returns": return_exprs, "body_code": body_code,
         "normalized_body": normalized_body, "calls": calls,

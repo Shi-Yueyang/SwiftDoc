@@ -46,6 +46,7 @@ class FuncReturn(TypedDict, total=False):
 class FuncDef(TypedDict, total=False):
     name: str
     file: str
+    start_line: int
     inputs: list[FuncInput]
     returns: list[FuncReturn]
     body_code: str
