@@ -116,6 +116,7 @@ def sample_functions():
             "name": "main",
             "file": "/project/main.c",
             "start_line": 10,
+            "conditional_macros": ["FEATURE_X", "USE_LOG"],
             "inputs": [
                 {"name": "argc", "kind": "parameter", "direction": "in", "type": "int", "type_ref": ""},
                 {"name": "argv", "kind": "parameter", "direction": "in", "type": "char**", "type_ref": ""},
@@ -132,6 +133,7 @@ def sample_functions():
             "name": "init",
             "file": "/project/main.c",
             "start_line": 25,
+            "conditional_macros": [],
             "inputs": [],
             "returns": [],
             "body_code": "global_mode = 0;",
@@ -144,6 +146,7 @@ def sample_functions():
             "name": "process",
             "file": "/project/main.c",
             "start_line": 35,
+            "conditional_macros": ["DEBUG"],
             "inputs": [
                 {"name": "data", "kind": "parameter", "direction": "in", "type": "int", "type_ref": ""},
             ],

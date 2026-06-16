@@ -22,6 +22,9 @@ Status system_init(void) {
     local_cfg.parity = 0;
 
     g_default_uart = local_cfg;
+#ifdef DEBUG_INIT_SEQUENCE
+    printf("System initializing with baud=%d\n", local_cfg.baud_rate);
+#endif
     sensor_init(local_cfg);
 
     g_system_ticks = 0;
@@ -46,6 +49,9 @@ Status system_get_reading(SensorData* out) {
     st = sensor_read(out);
     if (st == STATUS_OK) {
         s_read_count++;
+#if defined(ENABLE_TELEMETRY) || defined(LOG_READINGS)
+        log_sensor_reading(out);
+#endif
         g_last_status = STATUS_OK;
     } else {
         s_error_count++;
@@ -68,6 +74,9 @@ Status system_move_to(Point target) {
     }
 
     update_position(dx, dy);
+#ifndef DISABLE_POSITION_LOG
+    log_position_update(dx, dy);
+#endif
     g_last_status = STATUS_OK;
     return STATUS_OK;
 }

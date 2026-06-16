@@ -422,6 +422,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup, defines
     detected = chardet.detect(raw)
     encoding = detected.get("encoding", "utf-8")
     code = raw.decode(encoding, errors="ignore")
+    raw_code = code  # keep raw source before preprocessing
 
     # ── preprocess: resolve #ifdef / #ifndef based on --define flags ──
     code = preprocess_c_code(code, defines)
@@ -462,6 +463,9 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup, defines
             lines.append("    %s" % snippet)
         lines.append("  hint: try --define to activate guarded preprocessor regions")
         logger.warning("\n".join(lines))
+
+    # ── augment with raw-source line numbers and conditional macros ─────
+    _augment_functions_from_raw_source(raw_code, functions)
 
     return functions
 
@@ -553,6 +557,105 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
         "returns": return_exprs, "body_code": body_code,
         "normalized_body": normalized_body, "calls": calls,
     }]
+
+
+def _scan_conditional_macros(raw_code):
+    """Scan raw C code for conditional compilation macros referenced in
+    ``#ifdef`` / ``#ifndef`` / ``#if defined()`` / ``#elif defined()``.
+
+    Returns a ``{line_number: set(macro_names)}`` dict.  Only feature-flag
+    macros are captured — bare identifiers in ``#if MACRO`` expressions are
+    intentionally excluded (they could be numeric constants).
+    """
+    macros_by_line: dict[int, set[str]] = {}
+    lines = raw_code.split("\n")
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        # #ifdef MACRO
+        m = re.match(r"#ifdef\s+(\w+)", stripped)
+        if m:
+            macros_by_line.setdefault(i, set()).add(m.group(1))
+            continue
+
+        # #ifndef MACRO
+        m = re.match(r"#ifndef\s+(\w+)", stripped)
+        if m:
+            macros_by_line.setdefault(i, set()).add(m.group(1))
+            continue
+
+        # #if defined(MACRO) …  /  #elif defined(MACRO) …
+        m = re.match(r"#(?:if|elif)\s+(.+)", stripped)
+        if m:
+            for dm in re.finditer(r"defined\s*\(\s*(\w+)\s*\)", m.group(1)):
+                macros_by_line.setdefault(i, set()).add(dm.group(1))
+
+    return macros_by_line
+
+
+def _find_function_start_line(raw_code, func_name):
+    """Locate the raw-source line where *func_name* is defined.
+
+    Searches for ``type … func_name(`` patterns, skipping preprocessor
+    directives.  Returns a 1-based line number or *None* when the name
+    cannot be reliably found in definition context.
+    """
+    lines = raw_code.split("\n")
+    pattern = re.compile(r"\b" + re.escape(func_name) + r"\s*\(")
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        m = pattern.search(stripped)
+        if m:
+            before = stripped[:m.start()].strip()
+            # Must have a type/qualifier before the name — filter out
+            # calls (bare name) and statement starts.
+            if before and before[0] not in ";,=().{}[]":
+                return i
+    return None
+
+
+def _augment_functions_from_raw_source(raw_code, functions):
+    """Augment each function dict with raw-source ``start_line`` and
+    ``conditional_macros`` by correlating macro directive lines to function
+    line ranges.
+    """
+    if not functions:
+        return functions
+
+    line_macros = _scan_conditional_macros(raw_code)
+
+    # Find raw start_line for every function
+    for func in functions:
+        raw_start = _find_function_start_line(raw_code, func["name"])
+        if raw_start is not None:
+            func["start_line"] = raw_start
+
+    # Sort by start_line so we can compute per-function line ranges
+    sorted_funcs = sorted(functions, key=lambda f: f.get("start_line", 0))
+    all_macro_lines = sorted(line_macros.keys())
+    raw_line_count = len(raw_code.split("\n"))
+
+    for idx, func in enumerate(sorted_funcs):
+        start = func.get("start_line", 0)
+        if idx + 1 < len(sorted_funcs):
+            end = sorted_funcs[idx + 1].get("start_line", raw_line_count) - 1
+        else:
+            end = raw_line_count
+
+        macros = []
+        seen: set[str] = set()
+        for ml in all_macro_lines:
+            if start <= ml <= end:
+                for macro in sorted(line_macros[ml]):
+                    if macro not in seen:
+                        macros.append(macro)
+                        seen.add(macro)
+
+        func["conditional_macros"] = macros
+
+    return functions
 
 
 # 分析c文件

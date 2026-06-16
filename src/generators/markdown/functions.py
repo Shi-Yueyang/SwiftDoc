@@ -27,6 +27,15 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
     lines.append(f"**行号 Line number:** {start_line}")
     lines.append("")
 
+    cond_macros = func.get("conditional_macros", [])
+    if cond_macros:
+        lines.append("**宏列表 Macro list:**")
+        for macro in cond_macros:
+            lines.append(f"- {macro}")
+    else:
+        lines.append("**宏列表 Macro list:** N/A")
+    lines.append("")
+
     inputs = func.get("inputs", [])
 
     # Input table

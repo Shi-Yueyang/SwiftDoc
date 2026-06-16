@@ -100,6 +100,8 @@ class TestGenerateFunctionDocx:
         assert "/project/main.c" in all_text
         assert "行号 Line number:" in all_text
         assert "10" in all_text
+        assert "宏列表 Macro list:" in all_text
+        assert "FEATURE_X" in all_text
 
     def test_docx_contains_input_table(self, sample_functions, sample_types_json, tmp_path):
         output_dir = str(tmp_path / "docx_output3")

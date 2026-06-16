@@ -47,6 +47,7 @@ class FuncDef(TypedDict, total=False):
     name: str
     file: str
     start_line: int
+    conditional_macros: list[str]
     inputs: list[FuncInput]
     returns: list[FuncReturn]
     body_code: str

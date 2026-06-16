@@ -24,6 +24,14 @@ class TestNormalizeFunctionForDoc:
         result = normalize_function_for_doc({"name": "foo", "start_line": 42})
         assert result["start_line"] == 42
 
+    def test_sets_default_conditional_macros(self):
+        result = normalize_function_for_doc({"name": "foo"})
+        assert result["conditional_macros"] == []
+
+    def test_preserves_existing_conditional_macros(self):
+        result = normalize_function_for_doc({"name": "foo", "conditional_macros": ["A", "B"]})
+        assert result["conditional_macros"] == ["A", "B"]
+
     def test_sets_default_algorithm_logic(self):
         result = normalize_function_for_doc({"name": "foo"})
         assert result["algorithm_logic"] == ""
@@ -231,6 +239,9 @@ class TestGenerateFunctionMd:
         assert "**函数名 Function name:** main" in main_md
         assert "**文件名 File name:** /project/main.c" in main_md
         assert "**行号 Line number:** 10" in main_md
+        assert "**宏列表 Macro list:**" in main_md
+        assert "- FEATURE_X" in main_md
+        assert "- USE_LOG" in main_md
 
     # Test with figure reference
     def test_includes_figure_reference(self, sample_functions, sample_types_json, tmp_path):

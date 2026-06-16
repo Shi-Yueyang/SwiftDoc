@@ -12,6 +12,9 @@ from parsers.c.functions import (
     resolve_global_info,
     _analyze_pointer_directions,
     _extract_one_function,
+    _scan_conditional_macros,
+    _find_function_start_line,
+    _augment_functions_from_raw_source,
     extract_functions_from_c_file,
 )
 from parsers.common import (
@@ -659,3 +662,139 @@ int three(void) { return 3; }
         assert by_name["one"]["start_line"] == 1
         assert by_name["two"]["start_line"] == 3
         assert by_name["three"]["start_line"] == 5
+
+
+class TestScanConditionalMacros:
+    """Tests for _scan_conditional_macros — regex extraction of feature-flag
+    macros from raw source."""
+
+    def test_ifdef(self):
+        code = "#ifdef FEATURE_X\nint x = 1;\n#endif\n"
+        result = _scan_conditional_macros(code)
+        assert result == {1: {"FEATURE_X"}}
+
+    def test_ifndef(self):
+        code = "#ifndef USE_ALT\nint y = 2;\n#endif\n"
+        result = _scan_conditional_macros(code)
+        assert result == {1: {"USE_ALT"}}
+
+    def test_if_defined_single(self):
+        code = "#if defined(ENABLE_LOG)\nlog();\n#endif\n"
+        result = _scan_conditional_macros(code)
+        assert result == {1: {"ENABLE_LOG"}}
+
+    def test_if_defined_multiple(self):
+        code = "#if defined(FEATURE_A) || defined(FEATURE_B)\nuse_both();\n#endif\n"
+        result = _scan_conditional_macros(code)
+        assert result == {1: {"FEATURE_A", "FEATURE_B"}}
+
+    def test_elif_defined(self):
+        code = "#if FOO\nbar();\n#elif defined(ALT_FEATURE)\nalt();\n#endif\n"
+        result = _scan_conditional_macros(code)
+        # Only line 3 (#elif defined) should be captured — #if FOO bare ident is excluded
+        assert 3 in result
+        assert result[3] == {"ALT_FEATURE"}
+
+    def test_bare_if_macro_excluded(self):
+        """Bare identifiers in #if expressions (could be constants) are excluded."""
+        code = "#if BUFFER_SIZE > 256\nlarge_buf();\n#endif\n"
+        result = _scan_conditional_macros(code)
+        assert 1 not in result  # BUFFER_SIZE is a bare ident, not captured
+
+    def test_no_macros(self):
+        code = "void foo(void) { return; }\n"
+        result = _scan_conditional_macros(code)
+        assert result == {}
+
+    def test_mixed_directives(self):
+        code = "\n".join([
+            "void foo(void) {",
+            "#ifdef FEATURE_X",
+            "    do_x();",
+            "#endif",
+            "#ifndef NO_DEBUG",
+            "    log();",
+            "#endif",
+            "    return;",
+            "}",
+        ])
+        result = _scan_conditional_macros(code)
+        expected = {2: {"FEATURE_X"}, 5: {"NO_DEBUG"}}
+        assert result == expected
+
+
+class TestFindFunctionStartLine:
+    """Tests for _find_function_start_line — locating function definitions
+    in raw C source."""
+
+    def test_simple_function(self):
+        code = "int add(int a, int b) { return a + b; }\n"
+        assert _find_function_start_line(code, "add") == 1
+
+    def test_static_function(self):
+        code = "static void helper(void) { return; }\n"
+        assert _find_function_start_line(code, "helper") == 1
+
+    def test_function_with_leading_lines(self):
+        code = "// comment\n#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n"
+        assert _find_function_start_line(code, "main") == 4
+
+    def test_call_not_mistaken_for_definition(self):
+        """A function call (no return type before name) is not a definition."""
+        code = "void foo(void) {\n    bar(x);\n}\n"
+        # 'bar' on line 2 is a call, not a definition
+        result = _find_function_start_line(code, "bar")
+        assert result is None
+
+    def test_not_found_returns_none(self):
+        code = "int add(int a, int b);\n"
+        # This is a declaration, and the name appears but is the first token
+        # (no type before it on the same line after we strip)
+        result = _find_function_start_line(code, "add")
+        # "int add(" — before="int", starts with 'i', so it matches
+        assert result == 1
+
+
+class TestAugmentFunctionsFromRawSource:
+    """Tests for _augment_functions_from_raw_source — end-to-end correlation
+    of macros to functions by line range."""
+
+    def test_correlates_macros_to_functions(self):
+        code = "\n".join([
+            "void first(void) {",
+            "#ifdef FOO",
+            "    foo();",
+            "#endif",
+            "}",
+            "",
+            "void second(void) {",
+            "#ifndef BAR",
+            "    bar();",
+            "#endif",
+            "#if defined(BAZ)",
+            "    baz();",
+            "#endif",
+            "}",
+        ])
+        funcs = [
+            {"name": "first", "file": "test.c", "start_line": 0},
+            {"name": "second", "file": "test.c", "start_line": 0},
+        ]
+        _augment_functions_from_raw_source(code, funcs)
+
+        assert funcs[0]["start_line"] == 1
+        assert funcs[0]["conditional_macros"] == ["FOO"]
+
+        assert funcs[1]["start_line"] == 7
+        assert funcs[1]["conditional_macros"] == ["BAR", "BAZ"]
+
+    def test_no_macros_yields_empty_list(self):
+        code = "void simple(void) { return; }\n"
+        funcs = [{"name": "simple", "file": "test.c", "start_line": 0}]
+        _augment_functions_from_raw_source(code, funcs)
+        assert funcs[0]["start_line"] == 1
+        assert funcs[0]["conditional_macros"] == []
+
+    def test_empty_functions_list(self):
+        result = _augment_functions_from_raw_source("any code", [])
+        assert result == []

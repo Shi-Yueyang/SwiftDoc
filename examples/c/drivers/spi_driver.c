@@ -12,7 +12,11 @@ Status spi_init(SpiHandle* handle, unsigned char cs_pin, unsigned int clock_hz) 
     handle->cs_pin = cs_pin;
     handle->clock_hz = clock_hz;
     handle->mode = SPI_MODE_0;
+#ifdef DMA_SUPPORT
+    handle->dma_enabled = 1;
+#else
     handle->dma_enabled = 0;
+#endif
     handle->timeout_ms = 100;
 
     return STATUS_OK;
@@ -29,6 +33,10 @@ Status spi_transfer(const SpiHandle* handle, const BYTE* tx, BYTE* rx, unsigned 
     }
 
     spi_cs_assert(handle);
+
+#ifndef DISABLE_CRC
+    append_crc_byte(tx, len);
+#endif
 
     for (i = 0; i < (int)len; i++) {
         /* Simulate full-duplex SPI transfer: each TX byte produces one RX byte. */

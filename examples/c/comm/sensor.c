@@ -19,7 +19,11 @@ Status sensor_read(SensorData* out) {
     }
 
     /* Simulate ADC reading. */
+#ifdef USE_HARDWARE_ADC
+    s_sensor_value.raw_adc = hal_adc_read(ADC_CHANNEL_0);
+#else
     s_sensor_value.raw_adc = (s_sensor_value.raw_adc + 73) % 4096;
+#endif
     s_sensor_value.temperature_c = (float)s_sensor_value.raw_adc * 0.0125f;
 
     memcpy(out, &s_sensor_value, sizeof(SensorData));
@@ -53,8 +57,10 @@ static int validate_calibration(void) {
 }
 
 Status sensor_self_test(void) {
+#if defined(ENABLE_CALIBRATION_CHECK)
     if (!validate_calibration()) {
         return STATUS_ERROR;
     }
+#endif
     return STATUS_OK;
 }

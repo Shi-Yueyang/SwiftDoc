@@ -229,6 +229,18 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
     run.bold = True
     p.add_run(str(start_line))
 
+    cond_macros = func.get("conditional_macros", [])
+    p = doc.add_paragraph()
+    run = p.add_run("宏列表 Macro list: ")
+    run.bold = True
+    if cond_macros:
+        p.add_run(cond_macros[0])
+        for macro in cond_macros[1:]:
+            p = doc.add_paragraph()
+            p.add_run(f"  {macro}")
+    else:
+        p.add_run("N/A")
+
     _add_input_table(doc, func.get("inputs", []), heading_level + 1)
     _add_output_table(doc, func.get("returns", []), heading_level + 1,
                       return_type=func.get("return_type", ""))
