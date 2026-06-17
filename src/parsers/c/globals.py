@@ -25,6 +25,34 @@ def is_inside_function(node):
     return False
 
 
+def _collect_declarator_modifiers(declarator_node):
+    """Walk the declarator chain and return the type-modifier string.
+
+    Returns ``''`` for plain identifiers, ``'[]'`` / ``'[][]'``` for arrays,
+    ``'*'`` / ``'**'`` for pointers, and combinations like ``'*[]'``.
+
+    Handles ``init_declarator`` and ``parenthesized_declarator`` wrappers.
+    """
+    stars = ''
+    brackets = ''
+    node = declarator_node
+    # Unwrap init_declarator: ``arr[10] = {0}`` → ``arr[10]``
+    if node is not None and node.type == 'init_declarator':
+        node = node.child_by_field_name('declarator')
+    while node is not None:
+        if node.type == 'array_declarator':
+            brackets += '[]'
+            node = node.child_by_field_name('declarator')
+        elif node.type == 'pointer_declarator':
+            stars += '*'
+            node = node.child_by_field_name('declarator')
+        elif node.type == 'parenthesized_declarator':
+            node = node.child_by_field_name('declarator')
+        else:
+            break
+    return stars + brackets
+
+
 def collect_globals_from_c_file(c_file_path):
     with open(c_file_path, 'rb') as f:
         raw_data = f.read()
@@ -57,7 +85,7 @@ def collect_globals_from_c_file(c_file_path):
             type_node = node.child_by_field_name('type')
             if type_node is None:
                 return
-            var_type = get_node_text(type_node).strip()
+            var_type = get_node_text(type_node).strip() + _collect_declarator_modifiers(declarator)
             global_vars.append({
                 "name": var_name,
                 "type": var_type,
@@ -114,7 +142,7 @@ def collect_extern_from_h_file(h_file_path):
             type_node = node.child_by_field_name('type')
             if type_node is None:
                 return
-            var_type = get_node_text(type_node).strip()
+            var_type = get_node_text(type_node).strip() + _collect_declarator_modifiers(declarator)
             extern_vars.append({
                 "name": var_name,
                 "type": var_type,

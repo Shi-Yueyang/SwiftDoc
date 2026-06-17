@@ -237,7 +237,7 @@ class TestGenerateFunctionMd:
         main_md = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
         assert "### 模块描述" in main_md
         assert "**函数名 Function name:** main" in main_md
-        assert "**文件名 File name:** /project/main.c" in main_md
+        assert "**文件名 File name:** main.c" in main_md
         assert "**行号 Line number:** 10" in main_md
         assert "**宏列表 Macro list:**" in main_md
         assert "- FEATURE_X" in main_md

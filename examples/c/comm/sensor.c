@@ -13,6 +13,22 @@ void sensor_init(UartConfig cfg) {
     s_current_dir = DIR_STOP;
 }
 
+static int double_macro(){
+    if(1){
+        if(2){
+
+#ifdef PLATFORM_CVC_300C
+printf("");
+#endif
+
+#ifdef PLATFORM_EVC
+printf("");
+#endif
+        }
+    }
+printf("2");
+}
+
 Status sensor_read(SensorData* out) {
     if (out == NULL) {
         return STATUS_INVALID_PARAM;

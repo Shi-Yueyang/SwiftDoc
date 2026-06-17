@@ -215,32 +215,26 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
     start_line = func.get("start_line", 0)
 
     p = doc.add_paragraph()
-    run = p.add_run("函数名 Function name: ")
-    run.bold = True
+    run = p.add_run("ModuleName: ")
     p.add_run(fname)
 
     p = doc.add_paragraph()
-    run = p.add_run("文件名 File name: ")
-    run.bold = True
-    p.add_run(file_path)
+    run = p.add_run("FileName: ")
+    p.add_run(os.path.basename(file_path))
 
     p = doc.add_paragraph()
-    run = p.add_run("行号 Line number: ")
-    run.bold = True
+    run = p.add_run("LineNumber: ")
     p.add_run(str(start_line))
 
     cond_macros = func.get("conditional_macros", [])
     p = doc.add_paragraph()
-    run = p.add_run("宏列表 Macro list: ")
-    run.bold = True
+    run = p.add_run("MacroNameList< ")
     if cond_macros:
         p.add_run(cond_macros[0])
         for macro in cond_macros[1:]:
-            p = doc.add_paragraph()
             p.add_run(f"  {macro}")
-    else:
-        p.add_run("N/A")
-
+    p.add_run(" >")
+    
     _add_input_table(doc, func.get("inputs", []), heading_level + 1)
     _add_output_table(doc, func.get("returns", []), heading_level + 1,
                       return_type=func.get("return_type", ""))
@@ -287,7 +281,7 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
         doc = _create_document()
 
         doc.add_heading(os.path.basename(file_path), level=1)
-        doc.add_paragraph(f"Source file: {file_path}")
+        doc.add_paragraph(f"Source file: {os.path.basename(file_path)}")
         doc.add_paragraph(f"Functions: {len(funcs)}")
 
         for raw_func in funcs:

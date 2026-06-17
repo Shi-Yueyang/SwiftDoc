@@ -87,3 +87,54 @@ class TestExtractAllGlobals:
         assert len(names) == len(set(names)) or all(
             r.get("is_static") for r in results if names.count(r["name"]) > 1
         )
+
+
+class TestArrayGlobalTypes:
+    """Global arrays / pointers should include the declarator modifier in the type."""
+
+    def _write_and_extract(self, tmp_dir, c_code):
+        path = os.path.join(tmp_dir, "test_array.c")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(c_code)
+        vars_list = collect_globals_from_c_file(path)
+        return {v["name"]: v["type"] for v in vars_list}
+
+    def test_simple_array(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "int arr[10];")
+        assert types["arr"] == "int[]"
+
+    def test_multi_dimensional_array(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "int matrix[10][20];")
+        assert types["matrix"] == "int[][]"
+
+    def test_pointer_to_int(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "int *ptr;")
+        assert types["ptr"] == "int*"
+
+    def test_array_of_pointers(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "int *arr[10];")
+        assert types["arr"] == "int*[]"
+
+    def test_array_with_initializer(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "int arr[] = {1, 2, 3};")
+        assert types["arr"] == "int[]"
+
+    def test_plain_int_unchanged(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "int simple;")
+        assert types["simple"] == "int"
+
+    def test_static_array(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "static int test_global_arr[10];")
+        assert types["test_global_arr"] == "int[]"
+
+    def test_extern_array_from_header(self, tmp_dir):
+        h_path = os.path.join(tmp_dir, "test.h")
+        with open(h_path, "w", encoding="utf-8") as f:
+            f.write("extern int ext_arr[5];\n")
+        vars_list = collect_extern_from_h_file(h_path)
+        types = {v["name"]: v["type"] for v in vars_list}
+        assert types["ext_arr"] == "int[]"
+
+    def test_unsigned_long_array(self, tmp_dir):
+        types = self._write_and_extract(tmp_dir, "unsigned long buf[256];")
+        assert types["buf"] == "unsigned long[]"

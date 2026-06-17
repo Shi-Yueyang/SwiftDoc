@@ -22,7 +22,7 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
     lines.append("")
     lines.append(f"**函数名 Function name:** {fname}")
     lines.append("")
-    lines.append(f"**文件名 File name:** {file_path}")
+    lines.append(f"**文件名 File name:** {os.path.basename(file_path)}")
     lines.append("")
     lines.append(f"**行号 Line number:** {start_line}")
     lines.append("")
@@ -33,7 +33,7 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
         for macro in cond_macros:
             lines.append(f"- {macro}")
     else:
-        lines.append("**宏列表 Macro list:** N/A")
+        lines.append("**宏列表 Macro list:**")
     lines.append("")
 
     inputs = func.get("inputs", [])
@@ -165,7 +165,7 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
         safe_base = base.replace("\\", "_").replace("/", "_").replace(":", "_")
 
         filename = os.path.basename(file_path)
-        lines = [f"# {filename}", f"", f"**Source file: {file_path}**", "", f"Functions: {len(funcs)}", ""]
+        lines = [f"# {filename}", f"", f"**Source file: {filename}**", "", f"Functions: {len(funcs)}", ""]
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)

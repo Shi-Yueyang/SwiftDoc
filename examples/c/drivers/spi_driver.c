@@ -3,12 +3,12 @@
 #include "types.h"
 
 static SpiHandle s_active_handle;
-
+static int test_global_arr[10];
 Status spi_init(SpiHandle* handle, unsigned char cs_pin, unsigned int clock_hz) {
     if (handle == NULL || clock_hz == 0) {
         return STATUS_INVALID_PARAM;
     }
-
+    test_global_arr[0] = 1;
     handle->cs_pin = cs_pin;
     handle->clock_hz = clock_hz;
     handle->mode = SPI_MODE_0;

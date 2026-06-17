@@ -97,7 +97,7 @@ class TestGenerateFunctionDocx:
         assert "模块描述" in all_text
         assert "函数名 Function name:" in all_text
         assert "文件名 File name:" in all_text
-        assert "/project/main.c" in all_text
+        assert "main.c" in all_text
         assert "行号 Line number:" in all_text
         assert "10" in all_text
         assert "宏列表 Macro list:" in all_text
