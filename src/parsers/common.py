@@ -79,6 +79,7 @@ def write_types_cache(cache_path, master_data):
 
 def prepare_function_metadata(func, type_descriptions=None):
     func["algorithm_logic"] = func.get("algorithm_logic", "")
+    func["module_summary"] = func.get("module_summary", "")
 
     if (
         isinstance(func.get("returns"), list)
@@ -107,6 +108,7 @@ def enrich_function_with_ai(func, type_descriptions, language="c"):
     if response != AI_FAILED:
         try:
             desc = json.loads(response)
+            func["module_summary"] = desc.get("module_summary", "")
             func["algorithm_logic"] = desc.get("algorithm_logic", "")
             param_descs = {
                 item["name"]: item.get("inputs_description", "")
@@ -138,7 +140,16 @@ def is_missing_algorithm_logic(func):
     logic = func.get("algorithm_logic")
     if not isinstance(logic, str) or not logic.strip():
         return True
-    return logic == AI_FAILED
+    if logic == AI_FAILED:
+        return True
+    # module_summary is generated in the same AI call — if the AI call
+    # previously failed, the summary will also be missing/failed, so
+    # re-run.  But don't force a re-run just because an old cache
+    # predates the module_summary field.
+    summary = func.get("module_summary")
+    if isinstance(summary, str) and summary == AI_FAILED:
+        return True
+    return False
 
 
 # ── type AI ─────────────────────────────────────────────────────────────────

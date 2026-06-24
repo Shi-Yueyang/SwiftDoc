@@ -11,7 +11,7 @@ from config.manager import (
     set_config_value,
     STATE_DIR,
 )
-from config.toml_config import load_toml, find_config
+from config.toml_config import load_toml, find_config, DEFAULT_CONFIG_NAME, DEFAULT_CONFIG_TEMPLATE
 from parsers import detect_language
 from pipeline import run_extract_phase, run_docgen_phase
 from core.utils import get_default_cache_dir
@@ -97,7 +97,7 @@ def _resolve_config_and_root(cli_args):
                 sys.exit(1)
         else:
             print("Error: no project directory or config specified.", file=sys.stderr)
-            print("Usage: swift-doc generate <project_dir | config.toml>", file=sys.stderr)
+            print("Usage: swift-doc moduledesign <project_dir | config.toml>", file=sys.stderr)
             sys.exit(1)
 
     return root_dir, toml_config
@@ -143,11 +143,11 @@ def validate_paths(root_dir, analyse_dirs):
 def build_parser(default_cache_dir):
     examples = """Examples:
   Generate documentation:
-    swift-doc generate examples/c
-    swift-doc generate examples/c --lang c --style plain
-    swift-doc generate my-config.toml
-    swift-doc generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    swift-doc generate examples/c --ignore-calls free --ignore-calls malloc
+    swift-doc moduledesign examples/c
+    swift-doc moduledesign examples/c --lang c --style plain
+    swift-doc moduledesign my-config.toml
+    swift-doc moduledesign examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    swift-doc moduledesign examples/c --ignore-calls free --ignore-calls malloc
 
   Configure AI:
     swift-doc config
@@ -158,6 +158,10 @@ def build_parser(default_cache_dir):
   Clear cache:
     swift-doc clear-cache
     swift-doc clear-cache --cache_dir .analysis
+
+  Create template config:
+    swift-doc createconfig
+    swift-doc createconfig -o my-config.toml
 """
     parser = argparse.ArgumentParser(
         description="Analyze source code, generate documentation, and manage AI configuration",
@@ -172,95 +176,101 @@ def build_parser(default_cache_dir):
 
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
-    generate_examples = """Examples:
-    swift-doc generate examples/c
-    swift-doc generate examples/c --lang c --style plain
-    swift-doc generate my-config.toml
-    swift-doc generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    swift-doc generate examples/c --group-by file --format markdown
-    swift-doc generate examples/c --ignore-calls free --ignore-calls malloc
+    moduledesign_examples = """Examples:
+    swift-doc moduledesign examples/c
+    swift-doc moduledesign examples/c --lang c --style plain
+    swift-doc moduledesign my-config.toml
+    swift-doc moduledesign examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    swift-doc moduledesign examples/c --group-by file --format markdown
+    swift-doc moduledesign examples/c --ignore-calls free --ignore-calls malloc
 """
 
-    generate_parser = subparsers.add_parser(
-        "generate",
+    moduledesign_parser = subparsers.add_parser(
+        "moduledesign",
         help="Extract project data and generate documentation",
-        epilog=generate_examples,
+        epilog=moduledesign_examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "root_dir",
         nargs="?",
         default=argparse.SUPPRESS,
         help="Project root directory or path to a TOML config file",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--lang",
         default=argparse.SUPPRESS,
         help="Source language for parsing (auto-detected if not specified, default: auto)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--analyse_dir",
         action="append",
         default=argparse.SUPPRESS,
         help="Subset of root_dir to generate docs for (repeatable, defaults to root_dir)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--cache_dir",
         default=argparse.SUPPRESS,
         help="Cache directory for intermediate JSON files",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--output_folder",
         default=argparse.SUPPRESS,
         help="Output directory for markdown and figures (default: out)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--ai",
         choices=["on", "off"],
         default=argparse.SUPPRESS,
         help="Enable AI for type/function analysis (default: off)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--format",
         choices=["markdown", "docx"],
         default=argparse.SUPPRESS,
         help="Output documentation format (default: docx)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--group-by",
         choices=["function", "file"],
         default=argparse.SUPPRESS,
         help="Generate one doc per function or per source file (default: file)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--style",
         choices=["plain", "slate", "fearless", "red", "table"],
         default=argparse.SUPPRESS,
         help="Graph plotting style (default: plain)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--ignore-calls",
         action="append",
         default=argparse.SUPPRESS,
         help="Function names to exclude from call graphs (repeatable)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--ignore-types",
         action="append",
         default=argparse.SUPPRESS,
         help="Type names to exclude from extraction (repeatable)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--ignore-kinds",
         action="append",
         default=argparse.SUPPRESS,
         help="Type kinds to exclude: typedef, enum, struct, union (repeatable)",
     )
-    generate_parser.add_argument(
+    moduledesign_parser.add_argument(
         "--define",
         action="append",
         default=argparse.SUPPRESS,
         help="Preprocessor macro to mark as defined (repeatable)",
+    )
+    moduledesign_parser.add_argument(
+        "--skip-sections",
+        type=str,
+        default=argparse.SUPPRESS,
+        help="Comma-separated section keys to skip: module_description,inputs,outputs,global_data,local_data,algorithm,interface,appendix",
     )
 
     config_examples = """Examples:
@@ -307,6 +317,24 @@ def build_parser(default_cache_dir):
         help="Cache directory to clear (default: last used, or platform cache dir)",
     )
 
+    createconfig_examples = """Examples:
+    swift-doc createconfig
+    swift-doc createconfig -o my-config.toml
+"""
+
+    createconfig_parser = subparsers.add_parser(
+        "createconfig",
+        help="Generate a template TOML config file",
+        description="Generate a comprehensive template swift-doc.toml with all recognized options documented.",
+        epilog=createconfig_examples,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    createconfig_parser.add_argument(
+        "-o", "--output",
+        default=DEFAULT_CONFIG_NAME,
+        help=f"Output path for the config file (default: {DEFAULT_CONFIG_NAME})",
+    )
+
     return parser
 
 
@@ -348,7 +376,17 @@ def main():
             print(f"Cache directory does not exist: {cache_dir}")
         return
 
-    if cli_args.command == "generate":
+    if cli_args.command == "createconfig":
+        output_path = cli_args.output
+        if os.path.exists(output_path):
+            print(f"Error: {output_path} already exists. Remove it first or specify a different path.", file=sys.stderr)
+            sys.exit(1)
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(DEFAULT_CONFIG_TEMPLATE)
+        print(f"Created config file: {os.path.abspath(output_path)}")
+        return
+
+    if cli_args.command == "moduledesign":
         # -- resolve config source and root_dir --
         root_dir, toml_config = _resolve_config_and_root(cli_args)
 
@@ -383,6 +421,22 @@ def main():
         cli_defines = getattr(cli_args, "define", None)
         toml_defines = toml_config.get("define_macros") if toml_config else None
         defines = set(cli_defines or toml_defines or [])
+
+        # sections: start with TOML [sections] (all True default), then CLI --skip-sections overrides
+        toml_sections = toml_config.get("sections") if toml_config else None
+        if toml_sections is None:
+            toml_sections = {}
+        _ALL_SECTION_KEYS = {
+            "module_description", "module_summary", "inputs", "outputs",
+            "global_data", "local_data", "algorithm", "interface", "appendix",
+        }
+        sections = {k: toml_sections.get(k, True) for k in _ALL_SECTION_KEYS}
+        cli_skip = getattr(cli_args, "skip_sections", None)
+        if cli_skip:
+            for key in cli_skip.split(","):
+                key = key.strip()
+                if key in _ALL_SECTION_KEYS:
+                    sections[key] = False
 
         # -- validate --
         try:
@@ -422,6 +476,7 @@ def main():
             ignore_calls=ignore_calls,
             ignore_types=ignore_types,
             ignore_kinds=ignore_kinds,
+            sections=sections,
         )
         run_docgen_phase(docgen_args)
 

@@ -128,6 +128,7 @@ def sample_functions():
             "calls": ["init", "process"],
             "called_by": [],
             "algorithm_logic": "Entry point that initializes and processes.",
+            "module_summary": "Program entry point, initializes system and runs main loop.",
         },
         {
             "name": "init",
@@ -141,6 +142,7 @@ def sample_functions():
             "calls": [],
             "called_by": ["main"],
             "algorithm_logic": "Initializes global state.",
+            "module_summary": "Initializes global variables and system state.",
         },
         {
             "name": "process",
@@ -156,6 +158,7 @@ def sample_functions():
             "calls": [],
             "called_by": ["main"],
             "algorithm_logic": "Processes input data by doubling it.",
+            "module_summary": "Processes input data and returns doubled result.",
         },
     ]
 

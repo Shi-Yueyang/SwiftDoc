@@ -174,6 +174,15 @@ def run_docgen_phase(args):
     figures_dir = os.path.join(output_folder, "figures")
     graph_style = getattr(args, "style", "plain")
 
+    # Section toggles — defaults to all-enabled
+    _ALL_SECTION_KEYS = {
+        "module_description", "module_summary", "inputs", "outputs",
+        "global_data", "local_data", "algorithm", "interface", "appendix",
+    }
+    sections = getattr(args, "sections", None)
+    if sections is None:
+        sections = {k: True for k in _ALL_SECTION_KEYS}
+
     if graph_style != "table":
         generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir, style=graph_style)
 
@@ -185,12 +194,14 @@ def run_docgen_phase(args):
         output_dir=output_folder,
         group_by=getattr(args, "group_by", "file"),
         style=graph_style,
+        sections=sections,
     )
 
-    appendix_ext = get_format_extension(output_format)
-    appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
-    generator.generate_appendix(None, appendix_output, filter_types=None,
-                                language=getattr(args, "language", "c"),
-                                types_data_override=types_data)
+    if sections.get("appendix", True):
+        appendix_ext = get_format_extension(output_format)
+        appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
+        generator.generate_appendix(None, appendix_output, filter_types=None,
+                                    language=getattr(args, "language", "c"),
+                                    types_data_override=types_data)
 
     logger.info(colorize_extract_phase_message("It's done.", EXTRACT_PHASE_DONE_COLOR))

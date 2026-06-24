@@ -95,12 +95,13 @@ class TestGenerateFunctionDocx:
         doc = Document(os.path.join(output_dir, "main.docx"))
         all_text = " ".join(_get_paragraphs_text(doc))
         assert "模块描述" in all_text
-        assert "函数名 Function name:" in all_text
-        assert "文件名 File name:" in all_text
+        assert "ModuleName:" in all_text
+        assert "main" in all_text
+        assert "FileName:" in all_text
         assert "main.c" in all_text
-        assert "行号 Line number:" in all_text
+        assert "LineNumber:" in all_text
         assert "10" in all_text
-        assert "宏列表 Macro list:" in all_text
+        assert "MacroNameList<" in all_text
         assert "FEATURE_X" in all_text
 
     def test_docx_contains_input_table(self, sample_functions, sample_types_json, tmp_path):
@@ -167,6 +168,106 @@ class TestGenerateFunctionDocx:
             output_dir=output_dir,
         )
         assert os.path.exists(os.path.join(output_dir, "no_img_func.docx"))
+
+    # -- section toggle tests --
+
+    def test_all_sections_enabled_by_default(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_default_sec")
+        figures_dir = str(tmp_path / "figures_def_sec")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        all_text = " ".join(_get_paragraphs_text(doc))
+        assert "模块描述" in all_text
+        assert "输入项" in all_text
+        assert "输出项" in all_text
+        assert "全局数据结构" in all_text
+        assert "局部数据结构" in all_text
+        assert "算法和逻辑" in all_text
+        assert "接口" in all_text
+
+    def test_skip_local_data_section(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_no_local")
+        figures_dir = str(tmp_path / "figures_no_local")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        sections = {"local_data": False}
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            sections=sections,
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        all_text = " ".join(_get_paragraphs_text(doc))
+        assert "模块描述" in all_text
+        assert "输入项" in all_text
+        assert "局部数据结构" not in all_text
+
+    def test_skip_multiple_sections(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_multi_skip")
+        figures_dir = str(tmp_path / "figures_multi_skip")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        sections = {"local_data": False, "algorithm": False, "interface": False}
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            sections=sections,
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        all_text = " ".join(_get_paragraphs_text(doc))
+        assert "模块描述" in all_text
+        assert "局部数据结构" not in all_text
+        assert "算法和逻辑" not in all_text
+        assert "接口" not in all_text
+
+    def test_module_summary_section_renders(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_summary")
+        figures_dir = str(tmp_path / "figures_summary")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        all_text = " ".join(_get_paragraphs_text(doc))
+        assert "模块功能" in all_text
+        assert "Program entry point" in all_text
+
+    def test_module_summary_can_be_skipped(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_no_summary")
+        figures_dir = str(tmp_path / "figures_no_summary")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        sections = {"module_summary": False}
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            sections=sections,
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        all_text = " ".join(_get_paragraphs_text(doc))
+        assert "模块功能" not in all_text
 
 
 class TestGroupByFileDocx:

@@ -64,7 +64,7 @@ types = ["noisy_type"]
 kinds = []
 ```
 
-CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distinguish "not passed" from "passed with default value." Merge happens in `cli.py:_resolve()`.
+CLI uses `argparse.SUPPRESS` for all moduledesign-command arguments so we can distinguish "not passed" from "passed with default value." Merge happens in `cli.py:_resolve()`.
 
 ## Ignore Filtering
 
@@ -85,15 +85,13 @@ CLI uses `argparse.SUPPRESS` for all generate-command arguments so we can distin
 
 ## Development Conventions
 
-**Only focus on the c parser now, forget about the ada parser**
-
 **Every bug fix must include a regression test.** Add it to the appropriate file under `tests/`. Match the existing test class and method naming style (`TestCamelCase`, `test_snake_case`). Use inline C code strings via `parse_c_code()` for unit tests, temp files via `tmp_dir`/`tmp_path` fixtures for file-level tests.
 
 **Keep CLAUDE.md current.** After any significant change — new feature, renamed component, changed default, fixed a tricky bug — update this file so the next agent has accurate context.
 
 **Run the full suite before declaring done.** `pytest tests/ -q` must pass. If changing defaults, check that no existing test silently depends on the old default.
 
-**Verify end-to-end for behavior changes.** Run `swift-doc generate examples/c --ai off` and inspect the output when touching extraction, generation, or filtering code. A passing unit test doesn't always catch a broken pipeline.
+**Verify end-to-end for behavior changes.** Run `swift-doc moduledesign examples/c --ai off` and inspect the output when touching extraction, generation, or filtering code. A passing unit test doesn't always catch a broken pipeline.
 
 **Match existing patterns.** Follow the code style, naming, and structure already in the file you're editing. New test helpers mirror `parse_c_code()` / `find_first_function_node()` in `test_module_analysis.py`. New config keys follow the `OPTIONAL_CONFIG_JSON_MAP` pattern.
 

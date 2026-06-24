@@ -75,11 +75,11 @@ class TestValidatePaths:
 
 
 class TestBuildParser:
-    def test_parser_has_generate_subcommand(self):
+    def test_parser_has_moduledesign_subcommand(self):
         p = build_parser("/tmp/cache")
         p.print_help()
-        ns = p.parse_args(["generate", "/some/project"])
-        assert ns.command == "generate"
+        ns = p.parse_args(["moduledesign", "/some/project"])
+        assert ns.command == "moduledesign"
         assert ns.root_dir == "/some/project"
         # argparse.SUPPRESS — attributes only exist when explicitly passed
         assert not hasattr(ns, "lang")
@@ -97,9 +97,9 @@ class TestBuildParser:
         assert ns.key == "temperature"
         assert ns.value == "0.7"
 
-    def test_generate_defaults(self):
+    def test_moduledesign_defaults(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj"])
+        ns = p.parse_args(["moduledesign", "/proj"])
         # argparse.SUPPRESS — unset attributes are absent
         assert not hasattr(ns, "lang")
         assert not hasattr(ns, "ai")
@@ -107,35 +107,56 @@ class TestBuildParser:
         assert not hasattr(ns, "output_folder")
         assert not hasattr(ns, "analyse_dir")
 
-    def test_generate_with_ai_on(self):
+    def test_moduledesign_with_ai_on(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj", "--ai", "on"])
+        ns = p.parse_args(["moduledesign", "/proj", "--ai", "on"])
         assert ns.ai == "on"
 
-    def test_generate_with_ada_lang(self):
+    def test_moduledesign_with_ada_lang(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj", "--lang", "ada"])
+        ns = p.parse_args(["moduledesign", "/proj", "--lang", "ada"])
         assert ns.lang == "ada"
 
-    def test_generate_with_multiple_analyse_dirs(self):
+    def test_moduledesign_with_multiple_analyse_dirs(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])
+        ns = p.parse_args(["moduledesign", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])
         assert ns.analyse_dir == ["/proj/a", "/proj/b"]
 
     def test_verbose_flag(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["--verbose", "generate", "/proj"])
+        ns = p.parse_args(["--verbose", "moduledesign", "/proj"])
         assert ns.verbose is True
 
     def test_ignore_calls_flag(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj", "--ignore-calls", "free", "--ignore-calls", "malloc"])
+        ns = p.parse_args(["moduledesign", "/proj", "--ignore-calls", "free", "--ignore-calls", "malloc"])
         assert ns.ignore_calls == ["free", "malloc"]
 
     def test_ignore_types_flag(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["generate", "/proj", "--ignore-types", "noisy_t"])
+        ns = p.parse_args(["moduledesign", "/proj", "--ignore-types", "noisy_t"])
         assert ns.ignore_types == ["noisy_t"]
+
+    def test_skip_sections_flag(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["moduledesign", "/proj", "--skip-sections", "local_data,algorithm"])
+        assert ns.skip_sections == "local_data,algorithm"
+
+    def test_parser_has_createconfig_subcommand(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["createconfig"])
+        assert ns.command == "createconfig"
+        assert ns.output == "swift-doc.toml"
+
+    def test_createconfig_custom_output(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["createconfig", "-o", "mycfg.toml"])
+        assert ns.output == "mycfg.toml"
+
+    def test_createconfig_long_output_flag(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["createconfig", "--output", "/abs/path/cfg.toml"])
+        assert ns.output == "/abs/path/cfg.toml"
 
 
 class TestMain:
@@ -166,14 +187,53 @@ class TestMain:
         main()
         assert len(called) == 1
 
-    def test_generate_validate_paths_fails(self, monkeypatch, tmp_path):
+    def test_moduledesign_validate_paths_fails(self, monkeypatch, tmp_path):
         import cli as cli_module
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
         monkeypatch.setattr(
             "sys.argv",
-            ["cli.py", "generate", "c", str(tmp_path), "--analyse_dir", "/nonexistent/path"],
+            ["cli.py", "moduledesign", "c", str(tmp_path), "--analyse_dir", "/nonexistent/path"],
         )
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code != 0
+
+    def test_createconfig_creates_file(self, tmp_path, monkeypatch, capsys):
+        output = tmp_path / "swift-doc.toml"
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("sys.argv", ["cli.py", "createconfig", "-o", str(output)])
+        main()
+        captured = capsys.readouterr()
+        assert output.exists()
+        content = output.read_text(encoding="utf-8")
+        assert content.startswith("# swift-doc.toml")
+        assert "root_dir" in content
+        assert "[ignore]" in content
+        assert "[define]" in content
+        assert "[sections]" in content
+        assert "Created config file:" in captured.out
+        assert str(output) in captured.out
+
+    def test_createconfig_fails_if_output_exists(self, tmp_path, monkeypatch, capsys):
+        output = tmp_path / "existing.toml"
+        output.write_text("# already here\n", encoding="utf-8")
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("sys.argv", ["cli.py", "createconfig", "-o", str(output)])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert "already exists" in captured.err
+        assert output.read_text(encoding="utf-8") == "# already here\n"
+
+    def test_createconfig_default_output_path(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("sys.argv", ["cli.py", "createconfig"])
+        monkeypatch.chdir(tmp_path)
+        main()
+        captured = capsys.readouterr()
+        expected = os.path.join(str(tmp_path), "swift-doc.toml")
+        assert os.path.isfile(expected)
+        assert "Created config file:" in captured.out
+        assert expected in captured.out
 

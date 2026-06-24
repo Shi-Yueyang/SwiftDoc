@@ -292,6 +292,137 @@ class TestGenerateFunctionMd:
         content = open(os.path.join(output_dir, "empty_func.md"), "r", encoding="utf-8").read()
         assert "N/A" in content
 
+    # -- section toggle tests --
+
+    def test_all_sections_enabled_by_default(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_default_sections")
+        figures_dir = str(tmp_path / "figures_def_sec")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        content = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "模块描述" in content
+        assert "输入项" in content
+        assert "输出项" in content
+        assert "全局数据结构" in content
+        assert "局部数据结构" in content
+        assert "算法和逻辑" in content
+        assert "接口" in content
+
+    def test_skip_local_data_section(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_no_local")
+        figures_dir = str(tmp_path / "figures_no_local")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        sections = {"local_data": False}
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            sections=sections,
+        )
+
+        content = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "模块描述" in content
+        assert "输入项" in content
+        assert "局部数据结构" not in content
+
+    def test_skip_multiple_sections(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_multi_skip")
+        figures_dir = str(tmp_path / "figures_multi_skip")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        sections = {"local_data": False, "algorithm": False, "interface": False}
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            sections=sections,
+        )
+
+        content = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "模块描述" in content
+        assert "局部数据结构" not in content
+        assert "算法和逻辑" not in content
+        assert "接口" not in content
+
+    def test_sections_none_is_all_enabled(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_none_sec")
+        figures_dir = str(tmp_path / "figures_none_sec")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            sections=None,
+        )
+
+        content = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "模块描述" in content
+        assert "局部数据结构" in content
+        assert "算法和逻辑" in content
+
+    def test_module_summary_section_renders(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_summary")
+        figures_dir = str(tmp_path / "figures_summary")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        content = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "模块功能" in content
+        assert "Program entry point" in content
+
+    def test_module_summary_can_be_skipped(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_no_summary")
+        figures_dir = str(tmp_path / "figures_no_summary")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            with open(os.path.join(figures_dir, f"{func['name']}.png"), "w") as f:
+                f.write("dummy")
+
+        sections = {"module_summary": False}
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            sections=sections,
+        )
+
+        content = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        assert "模块功能" not in content
+
 
 class TestGroupByFile:
     def test_generates_one_md_per_source_file(self, sample_functions, sample_types_json, tmp_path):

@@ -10,36 +10,36 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 # Run on the built-in C example
-swift-doc generate examples/c --ai off
+swift-doc moduledesign examples/c --ai off
 
 # Run on the Ada example
-swift-doc generate examples/ada --lang ada --ai off
+swift-doc moduledesign examples/ada --lang ada --ai off
 ```
 
 Output lands in `out/` by default — docs per file, call-graph PNGs in `out/figures/`, and a type appendix.
 
 ## Commands
 
-### `generate` — analyze source and produce docs
+### `moduledesign` — analyze source and produce docs
 
 ```bash
 # Project directory (auto-discovers swift-doc.toml inside)
-swift-doc generate examples/c
+swift-doc moduledesign examples/c
 
 # Explicit TOML config file
-swift-doc generate my-config.toml
+swift-doc moduledesign my-config.toml
 
 # CLI-only (no config needed)
-swift-doc generate examples/c --lang c --format markdown --group-by function
+swift-doc moduledesign examples/c --lang c --format markdown --group-by function
 
 # Scope to specific directories or files
-swift-doc generate examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+swift-doc moduledesign examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
 
 # Filter noisy calls from call graphs
-swift-doc generate examples/c --ignore-calls free --ignore-calls malloc
+swift-doc moduledesign examples/c --ignore-calls free --ignore-calls malloc
 
 # With AI-powered descriptions (requires config)
-swift-doc generate examples/c --ai on
+swift-doc moduledesign examples/c --ai on
 ```
 
 | Argument | Default | Description |
@@ -86,7 +86,7 @@ swift-doc clear                           # alias for clear-cache
 ## Project Configuration (`swift-doc.toml`)
 
 Place a `swift-doc.toml` in your project root to avoid typing CLI flags every time.
-The tool auto-discovers it when you run `swift-doc generate <project-dir>`.
+The tool auto-discovers it when you run `swift-doc moduledesign <project-dir>`.
 
 ```toml
 root_dir = "my-project"

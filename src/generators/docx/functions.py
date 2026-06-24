@@ -201,7 +201,9 @@ def _add_call_graph(doc, func, fname, figures_dir, heading_level, style="plain")
 
 
 def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level,
-                         style="plain"):
+                         style="plain", sections=None):
+    if sections is None:
+        sections = {}
     fname = func.get("name", "unknown_func")
     doc.add_heading(fname, level=heading_level)
 
@@ -210,38 +212,51 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
     run.bold = True
 
     # 模块描述
-    doc.add_heading("模块描述", level=heading_level + 1)
-    file_path = func.get("file", "unknown")
-    start_line = func.get("start_line", 0)
+    if sections.get("module_description", True):
+        doc.add_heading("模块描述", level=heading_level + 1)
+        file_path = func.get("file", "unknown")
+        start_line = func.get("start_line", 0)
 
-    p = doc.add_paragraph()
-    run = p.add_run("ModuleName: ")
-    p.add_run(fname)
+        p = doc.add_paragraph()
+        run = p.add_run("ModuleName: ")
+        p.add_run(fname)
 
-    p = doc.add_paragraph()
-    run = p.add_run("FileName: ")
-    p.add_run(os.path.basename(file_path))
+        p = doc.add_paragraph()
+        run = p.add_run("FileName: ")
+        p.add_run(os.path.basename(file_path))
 
-    p = doc.add_paragraph()
-    run = p.add_run("LineNumber: ")
-    p.add_run(str(start_line))
+        p = doc.add_paragraph()
+        run = p.add_run("LineNumber: ")
+        p.add_run(str(start_line))
 
-    cond_macros = func.get("conditional_macros", [])
-    p = doc.add_paragraph()
-    run = p.add_run("MacroNameList< ")
-    if cond_macros:
-        p.add_run(cond_macros[0])
-        for macro in cond_macros[1:]:
-            p.add_run(f"  {macro}")
-    p.add_run(" >")
-    
-    _add_input_table(doc, func.get("inputs", []), heading_level + 1)
-    _add_output_table(doc, func.get("returns", []), heading_level + 1,
-                      return_type=func.get("return_type", ""))
-    _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map, heading_level + 1)
-    _add_local_data_table(doc, heading_level + 1)
-    _add_algorithm_section(doc, func.get("algorithm_logic", ""), heading_level + 1)
-    _add_call_graph(doc, func, fname, figures_dir, heading_level + 1, style=style)
+        cond_macros = func.get("conditional_macros", [])
+        p = doc.add_paragraph()
+        run = p.add_run("MacroNameList< ")
+        if cond_macros:
+            p.add_run(cond_macros[0])
+            for macro in cond_macros[1:]:
+                p.add_run(f"  {macro}")
+        p.add_run(" >")
+
+    if sections.get("module_summary", True):
+        doc.add_heading("模块功能", level=heading_level + 1)
+        summary = func.get("module_summary", "")
+        doc.add_paragraph(summary if summary else "N/A")
+        doc.add_paragraph()
+
+    if sections.get("inputs", True):
+        _add_input_table(doc, func.get("inputs", []), heading_level + 1)
+    if sections.get("outputs", True):
+        _add_output_table(doc, func.get("returns", []), heading_level + 1,
+                          return_type=func.get("return_type", ""))
+    if sections.get("global_data", True):
+        _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map, heading_level + 1)
+    if sections.get("local_data", True):
+        _add_local_data_table(doc, heading_level + 1)
+    if sections.get("algorithm", True):
+        _add_algorithm_section(doc, func.get("algorithm_logic", ""), heading_level + 1)
+    if sections.get("interface", True):
+        _add_call_graph(doc, func, fname, figures_dir, heading_level + 1, style=style)
 
 
 def _sanitize_filename(name):
@@ -249,7 +264,7 @@ def _sanitize_filename(name):
 
 
 def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir,
-                                        style="plain"):
+                                        style="plain", sections=None):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
@@ -259,14 +274,14 @@ def generate_function_docx_per_function(function_list, types_json, figures_dir, 
         fname = func.get("name", "unknown_func")
         doc = _create_document()
         _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=1,
-                              style=style)
+                              style=style, sections=sections)
 
         safe_name = _sanitize_filename(fname)
         doc.save(os.path.join(output_dir, f"{safe_name}.docx"))
 
 
 def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir,
-                                   style="plain"):
+                                   style="plain", sections=None):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
@@ -287,7 +302,7 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
             _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=2,
-                                  style=style)
+                                  style=style, sections=sections)
             doc.add_page_break()
 
         safe_base = _sanitize_filename(base)
@@ -296,7 +311,7 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
 def generate_function_docx(functions_json=None, function_list=None, types_json=None,
                            figures_dir=None, output_dir="DOCX", group_by="function",
-                           style="plain"):
+                           style="plain", sections=None):
     if function_list is not None:
         functions = function_list
     else:
@@ -312,6 +327,8 @@ def generate_function_docx(functions_json=None, function_list=None, types_json=N
         raise ValueError("figures_dir must be provided")
 
     if group_by == "file":
-        generate_function_docx_by_file(functions, types_json, figures_dir, output_dir, style=style)
+        generate_function_docx_by_file(functions, types_json, figures_dir, output_dir, style=style,
+                                       sections=sections)
     else:
-        generate_function_docx_per_function(functions, types_json, figures_dir, output_dir, style=style)
+        generate_function_docx_per_function(functions, types_json, figures_dir, output_dir, style=style,
+                                            sections=sections)

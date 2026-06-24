@@ -67,7 +67,7 @@ def compare_functions(old_funcs, new_funcs):
                 old = candidates.pop(0)
                 if old["name"] == func["name"]:
                     continue  # same name, different file — not a rename
-                for field in ("algorithm_logic", "inputs_description", "return_description"):
+                for field in ("module_summary", "algorithm_logic", "inputs_description", "return_description"):
                     if old.get(field) and not func.get(field):
                         func[field] = old[field]
                 func["_renamed_from"] = old.get("_renamed_from", old["name"])

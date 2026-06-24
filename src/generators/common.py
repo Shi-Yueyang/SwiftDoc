@@ -77,6 +77,7 @@ def _generate_ada_definition(type_name: str, info: dict[str, Any]) -> str:
 def normalize_function_for_doc(func: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(func)
     normalized.setdefault("algorithm_logic", "")
+    normalized.setdefault("module_summary", "")
     normalized.setdefault("return_type", "")
     normalized.setdefault("start_line", 0)
     normalized.setdefault("conditional_macros", [])

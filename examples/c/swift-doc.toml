@@ -1,8 +1,8 @@
 # swift-doc.toml — example config for the C example project
 #
 # Run with:
-#   swift-doc generate examples/c
-#   swift-doc generate examples/c/swift-doc.toml
+#   swift-doc moduledesign examples/c
+#   swift-doc moduledesign examples/c/swift-doc.toml
 
 root_dir = "examples/c"
 

@@ -55,3 +55,4 @@ class FuncDef(TypedDict, total=False):
     calls: list[str]
     called_by: list[str]
     algorithm_logic: str
+    module_summary: str
