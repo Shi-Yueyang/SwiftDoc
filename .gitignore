@@ -26,7 +26,6 @@ out/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.github/
 # OS/editor artifacts
 .DS_Store
 .vscode/
