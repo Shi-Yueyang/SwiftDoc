@@ -43,6 +43,9 @@ root_dir = "."
 # ai = "off"                 # "off" | "on"
 # cache_dir = ".analysis"    # override the platform default cache dir
 # analyse_dirs = []          # scope docs to specific subdirectories (repeatable)
+# Example:
+#   analyse_dirs = ["src/core", "src/utils"]
+#   analyse_dirs = ["src/main.c"]              # single file
 
 # --- Ignore lists ---
 # Example:
