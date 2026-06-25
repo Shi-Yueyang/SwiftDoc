@@ -143,25 +143,23 @@ def validate_paths(root_dir, analyse_dirs):
 def build_parser(default_cache_dir):
     examples = """Examples:
   Generate documentation:
-    swift-doc moduledesign examples/c
-    swift-doc moduledesign examples/c --lang c --style plain
-    swift-doc moduledesign my-config.toml
-    swift-doc moduledesign examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    swift-doc moduledesign examples/c --ignore-calls free --ignore-calls malloc
+    swift-doc md examples/c
+    swift-doc md examples/c --lang c --style plain
+    swift-doc md my-config.toml
 
   Configure AI:
-    swift-doc config
-    swift-doc config temperature 0.7
-    swift-doc config max_tokens 1500
-    swift-doc config retry_count 3
+    swift-doc config-ai
+    swift-doc config-ai temperature 0.7
+
+  Create template config:
+    swift-doc md-toml
 
   Clear cache:
     swift-doc clear-cache
-    swift-doc clear-cache --cache_dir .analysis
 
-  Create template config:
-    swift-doc createconfig
-    swift-doc createconfig -o my-config.toml
+  Get detailed help for a command:
+    swift-doc md -h
+    swift-doc config-ai -h
 """
     parser = argparse.ArgumentParser(
         description="Analyze source code, generate documentation, and manage AI configuration",
@@ -177,16 +175,17 @@ def build_parser(default_cache_dir):
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     moduledesign_examples = """Examples:
-    swift-doc moduledesign examples/c
-    swift-doc moduledesign examples/c --lang c --style plain
-    swift-doc moduledesign my-config.toml
-    swift-doc moduledesign examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-    swift-doc moduledesign examples/c --group-by file --format markdown
-    swift-doc moduledesign examples/c --ignore-calls free --ignore-calls malloc
+    swift-doc md examples/c
+    swift-doc md examples/c --lang c --style plain
+    swift-doc md my-config.toml
+    swift-doc md examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
+    swift-doc md examples/c --group-by file --format markdown
+    swift-doc md examples/c --ignore-calls free --ignore-calls malloc
 """
 
     moduledesign_parser = subparsers.add_parser(
         "moduledesign",
+        aliases=["md", "generate"],
         help="Extract project data and generate documentation",
         epilog=moduledesign_examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -274,14 +273,14 @@ def build_parser(default_cache_dir):
     )
 
     config_examples = """Examples:
-    swift-doc config
-    swift-doc config temperature 0.7
-    swift-doc config max_tokens 1500
-    swift-doc config retry_count 3
+    swift-doc config-ai
+    swift-doc config-ai temperature 0.7
+    swift-doc config-ai max_tokens 1500
+    swift-doc config-ai retry_count 3
     """
 
     config_parser = subparsers.add_parser(
-        "config",
+        "config-ai",
         help="Run the interactive AI configuration onboarding flow or set a config value directly",
         description="Rerun the interactive AI configuration onboarding flow, or set a specific config key to a value.",
         epilog=config_examples,
@@ -318,12 +317,12 @@ def build_parser(default_cache_dir):
     )
 
     createconfig_examples = """Examples:
-    swift-doc createconfig
-    swift-doc createconfig -o my-config.toml
+    swift-doc md-toml
+    swift-doc md-toml -o my-config.toml
 """
 
     createconfig_parser = subparsers.add_parser(
-        "createconfig",
+        "md-toml",
         help="Generate a template TOML config file",
         description="Generate a comprehensive template swift-doc.toml with all recognized options documented.",
         epilog=createconfig_examples,
@@ -342,9 +341,12 @@ def main():
     default_cache_dir = str(get_default_cache_dir())
     parser = build_parser(default_cache_dir)
     cli_args = parser.parse_args(sys.argv[1:])
+    # Normalize alias
+    if cli_args.command in ("md", "generate"):
+        cli_args.command = "moduledesign"
     configure_logging(verbose=cli_args.verbose)
 
-    if cli_args.command == "config":
+    if cli_args.command == "config-ai":
         if cli_args.key and cli_args.value:
             try:
                 config_path = set_config_value(cli_args.key, cli_args.value)
@@ -376,7 +378,7 @@ def main():
             print(f"Cache directory does not exist: {cache_dir}")
         return
 
-    if cli_args.command == "createconfig":
+    if cli_args.command == "md-toml":
         output_path = cli_args.output
         if os.path.exists(output_path):
             print(f"Error: {output_path} already exists. Remove it first or specify a different path.", file=sys.stderr)

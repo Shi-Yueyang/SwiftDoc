@@ -86,14 +86,14 @@ class TestBuildParser:
 
     def test_parser_has_config_subcommand(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["config"])
-        assert ns.command == "config"
+        ns = p.parse_args(["config-ai"])
+        assert ns.command == "config-ai"
         assert ns.key is None
         assert ns.value is None
 
     def test_config_subcommand_with_key_value(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["config", "temperature", "0.7"])
+        ns = p.parse_args(["config-ai", "temperature", "0.7"])
         assert ns.key == "temperature"
         assert ns.value == "0.7"
 
@@ -142,20 +142,25 @@ class TestBuildParser:
         ns = p.parse_args(["moduledesign", "/proj", "--skip-sections", "local_data,algorithm"])
         assert ns.skip_sections == "local_data,algorithm"
 
+    def test_md_alias_for_moduledesign(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["md", "/proj"])
+        assert ns.command == "md"
+
     def test_parser_has_createconfig_subcommand(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["createconfig"])
-        assert ns.command == "createconfig"
+        ns = p.parse_args(["md-toml"])
+        assert ns.command == "md-toml"
         assert ns.output == "swift-doc.toml"
 
     def test_createconfig_custom_output(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["createconfig", "-o", "mycfg.toml"])
+        ns = p.parse_args(["md-toml", "-o", "mycfg.toml"])
         assert ns.output == "mycfg.toml"
 
     def test_createconfig_long_output_flag(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["createconfig", "--output", "/abs/path/cfg.toml"])
+        ns = p.parse_args(["md-toml", "--output", "/abs/path/cfg.toml"])
         assert ns.output == "/abs/path/cfg.toml"
 
 
@@ -164,7 +169,7 @@ class TestMain:
         config_path = tmp_path / "swift-doc" / "config.json"
         monkeypatch.setattr("cli.set_config_value", lambda k, v, **kw: str(config_path))
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "config", "temperature", "0.7"])
+        monkeypatch.setattr("sys.argv", ["cli.py", "config-ai", "temperature", "0.7"])
         main()
         captured = capsys.readouterr()
         assert "Config updated: temperature = 0.7" in captured.out
@@ -174,7 +179,7 @@ class TestMain:
             raise ValueError(f"Unknown config key: {k}")
         monkeypatch.setattr("cli.set_config_value", raise_val_err)
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "config", "bad_key", "val"])
+        monkeypatch.setattr("sys.argv", ["cli.py", "config-ai", "bad_key", "val"])
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 1
@@ -183,7 +188,7 @@ class TestMain:
         called = []
         monkeypatch.setattr("cli.rerun_ai_config_interactive", lambda: called.append(True))
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "config"])
+        monkeypatch.setattr("sys.argv", ["cli.py", "config-ai"])
         main()
         assert len(called) == 1
 
@@ -201,7 +206,7 @@ class TestMain:
     def test_createconfig_creates_file(self, tmp_path, monkeypatch, capsys):
         output = tmp_path / "swift-doc.toml"
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "createconfig", "-o", str(output)])
+        monkeypatch.setattr("sys.argv", ["cli.py", "md-toml", "-o", str(output)])
         main()
         captured = capsys.readouterr()
         assert output.exists()
@@ -218,7 +223,7 @@ class TestMain:
         output = tmp_path / "existing.toml"
         output.write_text("# already here\n", encoding="utf-8")
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "createconfig", "-o", str(output)])
+        monkeypatch.setattr("sys.argv", ["cli.py", "md-toml", "-o", str(output)])
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 1
@@ -228,7 +233,7 @@ class TestMain:
 
     def test_createconfig_default_output_path(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "createconfig"])
+        monkeypatch.setattr("sys.argv", ["cli.py", "md-toml"])
         monkeypatch.chdir(tmp_path)
         main()
         captured = capsys.readouterr()
