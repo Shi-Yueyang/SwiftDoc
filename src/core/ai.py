@@ -2,12 +2,19 @@ import os
 import time
 import logging
 from textwrap import dedent
+
+import httpx
 from openai import OpenAI
 
 from config.manager import get_missing_ai_keys, resolve_ai_config, load_ai_call_params
 
 
 logger = logging.getLogger(__name__)
+
+# Per-request timeout: quick connect to detect dead servers, generous read
+# window for LLM generation latency.
+_API_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
+
 
 def _get_client():
     config, details = resolve_ai_config()
@@ -18,7 +25,11 @@ def _get_client():
             "AI configuration is incomplete. "
             f"Missing: {missing_labels}. Checked {details['source_summary']}"
         )
-    client = OpenAI(base_url=config["base_url"], api_key=config["api_key"])
+    client = OpenAI(
+        base_url=config["base_url"],
+        api_key=config["api_key"],
+        timeout=_API_TIMEOUT,
+    )
     return client, config["model_name"]
 
 
