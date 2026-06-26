@@ -95,11 +95,11 @@ class TestGenerateFunctionDocx:
         doc = Document(os.path.join(output_dir, "main.docx"))
         all_text = " ".join(_get_paragraphs_text(doc))
         assert "模块描述" in all_text
-        assert "ModuleName:" in all_text
+        assert "ModuleName<" in all_text
         assert "main" in all_text
-        assert "FileName:" in all_text
+        assert "FileName<" in all_text
         assert "main.c" in all_text
-        assert "LineNumber:" in all_text
+        assert "LineNumber<" in all_text
         assert "10" in all_text
         assert "MacroNameList<" in all_text
         assert "FEATURE_X" in all_text

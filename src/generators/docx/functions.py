@@ -218,25 +218,22 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
         start_line = func.get("start_line", 0)
 
         p = doc.add_paragraph()
-        run = p.add_run("ModuleName: ")
-        p.add_run(fname)
+        run = p.add_run("ModuleName<")
+        p.add_run(f"{fname}>")
 
         p = doc.add_paragraph()
-        run = p.add_run("FileName: ")
-        p.add_run(os.path.basename(file_path))
+        run = p.add_run("FileName<")
+        p.add_run(f"{os.path.basename(file_path)}>")
 
         p = doc.add_paragraph()
-        run = p.add_run("LineNumber: ")
-        p.add_run(str(start_line))
+        run = p.add_run("LineNumber<")
+        p.add_run(f"{start_line}>")
 
         cond_macros = func.get("conditional_macros", [])
         p = doc.add_paragraph()
-        run = p.add_run("MacroNameList< ")
-        if cond_macros:
-            p.add_run(cond_macros[0])
-            for macro in cond_macros[1:]:
-                p.add_run(f"  {macro}")
-        p.add_run(" >")
+        run = p.add_run("MacroNameList<")
+        p.add_run(",".join(cond_macros))
+        p.add_run(">")
 
     if sections.get("module_summary", True):
         doc.add_heading("模块功能", level=heading_level + 1)
