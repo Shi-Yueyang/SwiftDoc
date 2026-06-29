@@ -1,7 +1,9 @@
 """
 Extract Ada type definitions from .ads files using tree-sitter.
 
-Handles records, enumerations, access types, array types, derived types, and subtypes.
+Handles records, enumerations, access types, array types, derived types,
+modular types, fixed-point types, floating-point types, interface types,
+private types, and subtypes.
 """
 
 import os
@@ -23,6 +25,12 @@ from parsers.common import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Kinds that lose to record/enumeration in deduplication across files.
+_LOW_PRIORITY_KINDS = frozenset({
+    "type", "access", "array", "derived", "subtype", "modular",
+    "fixed_point", "decimal_fixed_point", "float", "interface", "private",
+})
 
 ADA_LANGUAGE = Language(tree_sitter_ada.language())
 ada_parser = Parser(ADA_LANGUAGE)
@@ -87,7 +95,7 @@ def collect_ada_types_from_file(file_path):
                         for sub2 in sub.children:
                             if sub2.type == "component_list":
                                 members = _extract_component_list(sub2)
-                                definition["kind"] = "struct"
+                                definition["kind"] = "record"
                                 definition["name"] = name
                                 definition["members"] = members
                                 break
@@ -98,25 +106,55 @@ def collect_ada_types_from_file(file_path):
                 for sub in def_child.children:
                     if sub.is_named and sub.type == "identifier":
                         values.append(get_node_text(sub))
-                definition["kind"] = "enum"
+                definition["kind"] = "enumeration"
                 definition["name"] = name
                 definition["values"] = values
 
             elif def_child.type == "access_to_object_definition":
                 original = get_node_text(def_child).strip()
-                definition["kind"] = "typedef"
+                definition["kind"] = "access"
                 definition["name"] = name
                 definition["original_type"] = original
 
             elif def_child.type == "array_type_definition":
                 original = get_node_text(def_child).strip()
-                definition["kind"] = "typedef"
+                definition["kind"] = "array"
+                definition["name"] = name
+                definition["original_type"] = original
+
+            elif def_child.type == "derived_type_definition":
+                original = get_node_text(def_child).strip()
+                definition["kind"] = "derived"
+                definition["name"] = name
+                definition["original_type"] = original
+
+            elif def_child.type == "modular_type_definition":
+                original = get_node_text(def_child).strip()
+                definition["kind"] = "modular"
+                definition["name"] = name
+                definition["original_type"] = original
+
+            elif def_child.type in ("ordinary_fixed_point_definition",
+                                     "decimal_fixed_point_definition"):
+                original = get_node_text(def_child).strip()
+                definition["kind"] = "fixed_point"
+                definition["name"] = name
+                definition["original_type"] = original
+
+            elif def_child.type == "floating_point_definition":
+                original = get_node_text(def_child).strip()
+                definition["kind"] = "float"
+                definition["name"] = name
+                definition["original_type"] = original
+
+            elif def_child.type == "interface_type_definition":
+                original = get_node_text(def_child).strip()
+                definition["kind"] = "interface"
                 definition["name"] = name
                 definition["original_type"] = original
 
             else:
-                # Derived type or other: type Name is new Base;
-                # Collect text from 'is' keyword onward
+                # Unrecognized full_type_declaration form: collect text after 'is'
                 is_found = False
                 parts = []
                 for child in node.children:
@@ -129,7 +167,7 @@ def collect_ada_types_from_file(file_path):
                         parts.append(get_node_text(child))
                 original = " ".join(parts).rstrip(";").strip()
                 if original:
-                    definition["kind"] = "typedef"
+                    definition["kind"] = "type"
                     definition["name"] = name
                     definition["original_type"] = original
                 else:
@@ -162,7 +200,7 @@ def collect_ada_types_from_file(file_path):
 
             if original:
                 definition = {
-                    "kind": "typedef",
+                    "kind": "subtype",
                     "name": name,
                     "original_type": original,
                     "source_file": file_path,
@@ -170,6 +208,21 @@ def collect_ada_types_from_file(file_path):
                 comment = _get_comment_before(node, source_lines)
                 definition["comment"] = comment
                 type_defs[name] = definition
+
+        elif node.type == "private_type_declaration":
+            name_node = find_ada_identifier(node)
+            if name_node is None:
+                return
+            name = get_node_text(name_node)
+            definition = {
+                "kind": "private",
+                "name": name,
+                "original_type": "private",
+                "source_file": file_path,
+            }
+            comment = _get_comment_before(node, source_lines)
+            definition["comment"] = comment
+            type_defs[name] = definition
 
         for child in node.children:
             traverse(child)
@@ -189,7 +242,8 @@ def scan_project_types(project_dir):
                 all_types[name] = defn
             else:
                 existing = all_types[name]
-                if existing.get("kind") == "typedef" and defn.get("kind") != "typedef":
+                if (existing.get("kind") in _LOW_PRIORITY_KINDS
+                        and defn.get("kind") not in _LOW_PRIORITY_KINDS):
                     all_types[name] = defn
     return all_types
 

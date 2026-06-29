@@ -5,6 +5,7 @@ with Sensor;
 package body System_Pkg is
 
    Raw_Sensor_Data : Integer := 100;
+   Result : Float := 0.0;
 
    procedure Tick is
    begin

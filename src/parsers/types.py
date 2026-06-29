@@ -12,7 +12,7 @@ class GlobalVar(TypedDict, total=False):
 
 
 class TypeDef(TypedDict, total=False):
-    kind: str          # "struct" | "union" | "enum" | "typedef"
+    kind: str          # C: "struct" | "union" | "enum" | "typedef"; Ada: "record" | "enumeration" | "access" | "array" | "derived" | "subtype" | "modular" | "fixed_point" | "decimal_fixed_point" | "float" | "interface" | "private" | "type"
     name: str
     members: list[str]
     values: list[str]

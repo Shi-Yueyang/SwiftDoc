@@ -70,7 +70,7 @@ CLI uses `argparse.SUPPRESS` for all moduledesign-command arguments so we can di
 
 - `--ignore-calls` / `[ignore] calls` — filters function names from `calls` lists (not `called_by`). Applied at **docgen time** — cache stores complete data.
 - `--ignore-types` / `[ignore] types` — strips type names from `type_refs` and clears `type_ref` on global-variable inputs. Applied at **docgen time**.
-- `--ignore-kinds` / `[ignore] kinds` — drops types whose `kind` field matches (typedef, enum, struct, union). Default: empty (no filtering). Applied at **docgen time**.
+- `--ignore-kinds` / `[ignore] kinds` — drops types whose `kind` field matches. C kinds: struct, union, enum, typedef. Ada kinds: record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type. Default: empty (no filtering). Applied at **docgen time**.
 - Hardcoded baseline at extraction time: `_IGNORED_CALLS = {"memcpy", "memset"}` in `parsers/c/functions.py` — these are always filtered.
 
 ## Key Conventions

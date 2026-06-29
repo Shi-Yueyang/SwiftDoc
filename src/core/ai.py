@@ -41,7 +41,7 @@ def _language_label(language):
 def ai_prompt_for_type(type_name, definition, language="c"):
     lang = _language_label(language)
     kind = definition.get("kind", "unknown")
-    if kind == "struct":
+    if kind in ("struct", "record"):
         members = definition.get("members", [])
         members_str = "\n".join(members) if members else "无成员"
         prompt = dedent(
@@ -65,7 +65,7 @@ def ai_prompt_for_type(type_name, definition, language="c"):
             请直接输出一段描述文字（不超过200字）。
             """
         ).strip()
-    elif kind == "enum":
+    elif kind in ("enum", "enumeration"):
         values = definition.get("values", [])
         values_str = ", ".join(values) if values else "无枚举值"
         prompt = dedent(
@@ -76,7 +76,29 @@ def ai_prompt_for_type(type_name, definition, language="c"):
             请直接输出一段描述文字（不超过200字）。
             """
         ).strip()
-    else:  # typedef
+    elif kind in ("access", "array", "derived", "subtype", "modular",
+                  "fixed_point", "decimal_fixed_point", "float", "interface",
+                  "private", "type"):
+        # Ada-native type kinds
+        _LABELS = {
+            "access": "访问类型（指针）", "array": "数组类型",
+            "derived": "派生类型", "subtype": "子类型",
+            "modular": "模类型", "fixed_point": "定点类型",
+            "decimal_fixed_point": "十进制定点类型", "float": "浮点类型",
+            "interface": "接口类型", "private": "私有类型",
+            "type": "类型",
+        }
+        label = _LABELS.get(kind, "类型")
+        original_type = definition.get("original_type", "")
+        prompt = dedent(
+            f"""
+            你是一个嵌入式{lang}代码分析专家。请用简洁的中文描述以下{label}的用途和含义。
+            {label}名：{type_name}
+            原始类型：{original_type}
+            请直接输出一段描述文字，不要加任何前缀。
+            """
+        ).strip()
+    else:  # typedef (C) or unknown
         original_type = definition.get("original_type", "")
         prompt = dedent(
             f"""

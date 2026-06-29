@@ -66,6 +66,28 @@ class TestCollectGlobalsFromAdaFile:
             if v["name"] == "Flag":
                 assert v["type"] == "Boolean"
 
+    def test_skips_private_part_variables(self, tmp_dir):
+        code = """package P is
+           Public_Var : Integer;
+        private
+           Result : Integer;
+        end P;"""
+        path = _write_ada_file(tmp_dir, "test.ads", code)
+        result = collect_globals_from_ada_file(path)
+        names = {v["name"] for v in result}
+        assert "Public_Var" in names
+        assert "Result" not in names
+
+    def test_body_variable_not_affected_by_private_filter(self, tmp_dir):
+        """Private-part filtering is per-node: body variables are never private."""
+        code = """package body P is
+           Result : Float := 0.0;
+        end P;"""
+        path = _write_ada_file(tmp_dir, "test.adb", code)
+        result = collect_globals_from_ada_file(path)
+        names = {v["name"] for v in result}
+        assert "Result" in names
+
 
 class TestExtractAllGlobals:
     def test_extracts_from_directory(self, tmp_dir):

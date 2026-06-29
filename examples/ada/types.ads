@@ -43,4 +43,8 @@ package Types is
       BusyFlag : BYTE;
    end record;
 
+private
+   -- Internal result accumulator (not visible outside Types)
+   Result : Integer := 0;
+
 end Types;

@@ -257,7 +257,7 @@ def build_parser(default_cache_dir):
         "--ignore-kinds",
         action="append",
         default=argparse.SUPPRESS,
-        help="Type kinds to exclude: typedef, enum, struct, union (repeatable)",
+        help="Type kinds to exclude: struct, union, enum, typedef (C); record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type (Ada) (repeatable)",
     )
     moduledesign_parser.add_argument(
         "--define",

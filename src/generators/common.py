@@ -55,19 +55,23 @@ def _generate_c_definition(type_name: str, info: dict[str, Any]) -> str:
 
 def _generate_ada_definition(type_name: str, info: dict[str, Any]) -> str:
     kind = info.get("kind", "unknown")
-    if kind == "struct":
+    if kind == "record":
         members = info.get("members", [])
         if members:
             members_str = "\n   ".join(members)
             return f"type {type_name} is record\n   {members_str}\nend record;"
         return f"type {type_name} is record\n   null;\nend record;"
-    elif kind == "enum":
+    elif kind == "enumeration":
         values = info.get("values", [])
         if values:
             values_str = ", ".join(values)
             return f"type {type_name} is ({values_str});"
         return f"type {type_name} is (); -- no values"
-    elif kind == "typedef":
+    elif kind == "subtype":
+        original = info.get("original_type", "")
+        return f"subtype {type_name} is {original};"
+    elif kind in ("access", "array", "derived", "modular", "fixed_point",
+                  "decimal_fixed_point", "float", "interface", "private", "type"):
         original = info.get("original_type", "")
         return f"type {type_name} is {original};"
     else:

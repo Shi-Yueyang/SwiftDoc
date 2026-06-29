@@ -25,7 +25,7 @@ class TestCollectAdaTypes:
         path = _write_ada_file(tmp_dir, "test.ads", code)
         result = collect_ada_types_from_file(path)
         assert "Point" in result
-        assert result["Point"]["kind"] == "struct"
+        assert result["Point"]["kind"] == "record"
         assert len(result["Point"]["members"]) == 2
 
     def test_finds_enumeration_type(self, tmp_dir):
@@ -33,7 +33,7 @@ class TestCollectAdaTypes:
         path = _write_ada_file(tmp_dir, "test.ads", code)
         result = collect_ada_types_from_file(path)
         assert "Color" in result
-        assert result["Color"]["kind"] == "enum"
+        assert result["Color"]["kind"] == "enumeration"
         assert result["Color"]["values"] == ["Red", "Green", "Blue"]
 
     def test_finds_access_type(self, tmp_dir):
@@ -41,7 +41,7 @@ class TestCollectAdaTypes:
         path = _write_ada_file(tmp_dir, "test.ads", code)
         result = collect_ada_types_from_file(path)
         assert "Int_Ptr" in result
-        assert result["Int_Ptr"]["kind"] == "typedef"
+        assert result["Int_Ptr"]["kind"] == "access"
         assert "access" in result["Int_Ptr"]["original_type"]
 
     def test_finds_subtype(self, tmp_dir):
@@ -49,7 +49,7 @@ class TestCollectAdaTypes:
         path = _write_ada_file(tmp_dir, "test.ads", code)
         result = collect_ada_types_from_file(path)
         assert "My_Int" in result
-        assert result["My_Int"]["kind"] == "typedef"
+        assert result["My_Int"]["kind"] == "subtype"
         assert "Integer" in result["My_Int"]["original_type"]
 
     def test_finds_derived_type(self, tmp_dir):
@@ -57,7 +57,51 @@ class TestCollectAdaTypes:
         path = _write_ada_file(tmp_dir, "test.ads", code)
         result = collect_ada_types_from_file(path)
         assert "Meters" in result
-        assert result["Meters"]["kind"] == "typedef"
+        assert result["Meters"]["kind"] == "derived"
+
+    def test_finds_array_type(self, tmp_dir):
+        code = "package P is type Arr is array (1 .. 10) of Integer; end P;"
+        path = _write_ada_file(tmp_dir, "test.ads", code)
+        result = collect_ada_types_from_file(path)
+        assert "Arr" in result
+        assert result["Arr"]["kind"] == "array"
+        assert "array" in result["Arr"]["original_type"]
+
+    def test_finds_modular_type(self, tmp_dir):
+        code = "package P is type Flags is mod 256; end P;"
+        path = _write_ada_file(tmp_dir, "test.ads", code)
+        result = collect_ada_types_from_file(path)
+        assert "Flags" in result
+        assert result["Flags"]["kind"] == "modular"
+        assert "mod" in result["Flags"]["original_type"]
+
+    def test_finds_fixed_point_type(self, tmp_dir):
+        code = "package P is type Fixed is delta 0.1 range 0.0 .. 100.0; end P;"
+        path = _write_ada_file(tmp_dir, "test.ads", code)
+        result = collect_ada_types_from_file(path)
+        assert "Fixed" in result
+        assert result["Fixed"]["kind"] == "fixed_point"
+
+    def test_finds_float_type(self, tmp_dir):
+        code = "package P is type Real is digits 10; end P;"
+        path = _write_ada_file(tmp_dir, "test.ads", code)
+        result = collect_ada_types_from_file(path)
+        assert "Real" in result
+        assert result["Real"]["kind"] == "float"
+
+    def test_finds_interface_type(self, tmp_dir):
+        code = "package P is type Shape is interface; end P;"
+        path = _write_ada_file(tmp_dir, "test.ads", code)
+        result = collect_ada_types_from_file(path)
+        assert "Shape" in result
+        assert result["Shape"]["kind"] == "interface"
+
+    def test_finds_private_type(self, tmp_dir):
+        code = "package P is type Handle is private; end P;"
+        path = _write_ada_file(tmp_dir, "test.ads", code)
+        result = collect_ada_types_from_file(path)
+        assert "Handle" in result
+        assert result["Handle"]["kind"] == "private"
 
     def test_multiple_types_in_file(self, tmp_dir):
         code = """package P is
@@ -102,7 +146,16 @@ class TestScanProjectTypes:
         result = scan_project_types(tmp_dir)
         assert "T" in result
         # Should keep the non-typedef version
-        assert result["T"]["kind"] in ("enum", "struct")
+        assert result["T"]["kind"] in ("enumeration", "record")
+
+    def test_dedup_record_beats_access(self, tmp_dir):
+        code_a = "package A is type T is access Integer; end A;"
+        code_b = "package B is type T is record X : Integer; end record; end B;"
+        _write_ada_file(tmp_dir, "a.ads", code_a)
+        _write_ada_file(tmp_dir, "b.ads", code_b)
+        result = scan_project_types(tmp_dir)
+        assert "T" in result
+        assert result["T"]["kind"] == "record"
 
 
 class TestIsMissingTypeDescription:

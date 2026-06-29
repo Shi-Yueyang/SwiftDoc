@@ -26,6 +26,26 @@ def _is_inside_subprogram(node):
     return False
 
 
+def _is_in_private_part(node):
+    """Check if a node is in the private part of a package declaration.
+
+    In tree-sitter-ada the ``private`` keyword is an unnamed sibling
+    inside ``package_declaration``, not a named container node.
+    """
+    parent = node.parent
+    if parent is None or parent.type != "package_declaration":
+        return False
+    node_pos = node.start_byte
+    for child in parent.children:
+        if child.start_byte >= node_pos:
+            break
+        if not child.is_named:
+            text = get_node_text(child).strip()
+            if text == "private":
+                return True
+    return False
+
+
 def collect_globals_from_ada_file(file_path):
     """Extract package-level variable declarations from a single Ada file."""
     with open(file_path, "rb") as f:
@@ -37,7 +57,7 @@ def collect_globals_from_ada_file(file_path):
     globals_list = []
 
     def traverse(node):
-        if node.type == "object_declaration" and not _is_inside_subprogram(node):
+        if node.type == "object_declaration" and not _is_inside_subprogram(node) and not _is_in_private_part(node):
             name_node = find_ada_identifier(node)
             if name_node is None:
                 return
