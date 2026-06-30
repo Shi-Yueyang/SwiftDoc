@@ -501,7 +501,8 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
     for p in params:
         inputs.append({
             "name": p["name"], "kind": "parameter",
-            "direction": "in", "type": p["type"], "type_ref": "",
+            "direction": "in", "type": p["type"],
+            "type_ref": get_type_ref(p["type"], type_refs) or "",
         })
         if "*" in p["type"]:
             pointer_params.add(p["name"])

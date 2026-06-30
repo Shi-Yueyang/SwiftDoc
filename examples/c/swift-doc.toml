@@ -27,5 +27,9 @@ ai = "off"                  # "off" | "on"
 calls = []
 # Type names to skip
 types = []
-# Type kinds to skip: typedef, enum, struct, union (empty = keep all)
+# Type kinds to skip:
+#   C: struct, union, enum, typedef
+#   Ada: record, enumeration, access, array, derived, subtype,
+#        modular, fixed_point, decimal_fixed_point, float, interface, private, type
+#   (empty = keep all)
 kinds = []

@@ -11,7 +11,7 @@ env/
 # Local secrets and env files
 .env
 .env.*
-
+swift-doc.toml
 # Build and analysis outputs
 .analysis/
 .cache/

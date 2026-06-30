@@ -56,7 +56,7 @@ root_dir = "."
 [ignore]
 calls = []                   # function names to exclude from call graphs
 types = []                   # type names to skip during extraction
-kinds = []                   # type kinds to skip: typedef, enum, struct, union
+kinds = []                   # type kinds to skip: C: struct, union, enum, typedef; Ada: record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type
 
 # --- Preprocessor defines ---
 # Example:

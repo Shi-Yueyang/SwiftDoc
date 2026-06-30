@@ -53,7 +53,7 @@ swift-doc moduledesign examples/c --ai on
 | `--format` | `docx` | Output format (`markdown`, `docx`) |
 | `--group-by` | `file` | Group docs per `function` or per `file` |
 | `--style` | `plain` | Call-graph style (`plain` black/white, or `table` inline) |
-| `--ignore-kinds` | — | Type kinds to exclude: typedef, enum, struct, union (repeatable) |
+| `--ignore-kinds` | — | Type kinds to exclude: C: struct, union, enum, typedef; Ada: record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type (repeatable) |
 | `--ignore-calls` | — | Function names to exclude from call graphs (repeatable) |
 | `--ignore-types` | — | Type names to exclude from extraction (repeatable) |
 | `--verbose` | off | Enable debug logging |

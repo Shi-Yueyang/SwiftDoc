@@ -88,3 +88,16 @@ int system_get_read_count(void) {
 int system_get_error_count(void) {
     return s_error_count;
 }
+
+/*
+ * Apply a new UART configuration at runtime.
+ * The 'cfg' parameter type (UartConfig) should be linked via type_ref
+ * to the UartConfig struct definition in the appendix.
+ */
+Status system_apply_uart_config(UartConfig cfg) {
+    if (cfg.baud_rate == 0 || cfg.data_bits == 0) {
+        return STATUS_INVALID_PARAM;
+    }
+    g_default_uart = cfg;
+    return STATUS_OK;
+}
