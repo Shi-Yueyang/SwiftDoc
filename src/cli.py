@@ -58,17 +58,10 @@ def _resolve_config_and_root(cli_args):
     positional = getattr(cli_args, "root_dir", None)
     toml_config = None
 
-    if positional and positional.endswith(".toml"):
-        # Explicit TOML config file
-        if not os.path.isfile(positional):
-            print(f"Error: config file not found: {positional}", file=sys.stderr)
+    if positional and os.path.isfile(positional):
+        if positional.endswith(".toml"):
+            print(f"Error: use 'swift-doc {positional}' instead of 'swift-doc md {positional}'", file=sys.stderr)
             sys.exit(1)
-        toml_config = load_toml(positional)
-        root_dir = toml_config.get("root_dir")
-        if not root_dir:
-            print("Error: root_dir is required in TOML config", file=sys.stderr)
-            sys.exit(1)
-    elif positional and os.path.isfile(positional):
         # Single source file — treat parent dir as root, file as analyse_dir
         root_dir = os.path.dirname(os.path.abspath(positional))
         # Auto-discover swift-doc.toml from the parent dir
@@ -143,10 +136,12 @@ def validate_paths(root_dir, analyse_dirs):
 
 def build_parser(default_cache_dir):
     examples = """Examples:
-  Generate documentation:
+  Generate documentation from a TOML config:
+    swift-doc my-config.toml
+
+  Generate documentation from a source directory:
     swift-doc md examples/c
     swift-doc md examples/c --lang c --style plain
-    swift-doc md my-config.toml
 
   Configure AI:
     swift-doc config-ai
@@ -180,12 +175,11 @@ def build_parser(default_cache_dir):
         help="Enable verbose debug logging",
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
+    subparsers = parser.add_subparsers(dest="command", required=False, help="Available commands")
 
     moduledesign_examples = """Examples:
     swift-doc md examples/c
     swift-doc md examples/c --lang c --style plain
-    swift-doc md my-config.toml
     swift-doc md examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
     swift-doc md examples/c --group-by file --format markdown
     swift-doc md examples/c --ignore-calls free --ignore-calls malloc
@@ -202,7 +196,7 @@ def build_parser(default_cache_dir):
         "root_dir",
         nargs="?",
         default=argparse.SUPPRESS,
-        help="Project root directory or path to a TOML config file",
+        help="Project root directory or a single source file",
     )
     moduledesign_parser.add_argument(
         "--lang",
@@ -345,10 +339,136 @@ def build_parser(default_cache_dir):
     return parser
 
 
+def _run_moduledesign(cli_args, toml_config_override=None):
+    """Run the moduledesign document generation pipeline.
+
+    When *toml_config_override* is provided it is used as the TOML config
+    (the ``root_dir`` positional on *cli_args* may be a .toml path or absent).
+    """
+    default_cache_dir = str(get_default_cache_dir())
+
+    if toml_config_override is not None:
+        root_dir = toml_config_override["root_dir"]
+        toml_config = toml_config_override
+    else:
+        root_dir, toml_config = _resolve_config_and_root(cli_args)
+
+    lang = _resolve("lang", cli_args, toml_config, _DEFAULTS["lang"])
+    output_folder = _resolve("output_folder", cli_args, toml_config, _DEFAULTS["output_folder"])
+    cache_dir = _resolve("cache_dir", cli_args, toml_config, default_cache_dir)
+    fmt = _resolve("format", cli_args, toml_config, _DEFAULTS["format"])
+    group_by = _resolve("group_by", cli_args, toml_config, _DEFAULTS["group_by"])
+    style = _resolve("style", cli_args, toml_config, _DEFAULTS["style"])
+    ai = _resolve("ai", cli_args, toml_config, _DEFAULTS["ai"])
+
+    cli_analyse = getattr(cli_args, "analyse_dir", None)
+    toml_analyse = toml_config.get("analyse_dirs") if toml_config else None
+    analyse_dirs = cli_analyse or toml_analyse or [root_dir]
+
+    cli_ignore_calls = getattr(cli_args, "ignore_calls", None)
+    toml_ignore_calls = toml_config.get("ignore_calls") if toml_config else None
+    ignore_calls = set(cli_ignore_calls or toml_ignore_calls or [])
+
+    cli_ignore_types = getattr(cli_args, "ignore_types", None)
+    toml_ignore_types = toml_config.get("ignore_types") if toml_config else None
+    ignore_types = set(cli_ignore_types or toml_ignore_types or [])
+
+    cli_ignore_kinds = getattr(cli_args, "ignore_kinds", None)
+    toml_ignore_kinds = toml_config.get("ignore_kinds") if toml_config else None
+    ignore_kinds = cli_ignore_kinds or toml_ignore_kinds or []
+
+    cli_defines = getattr(cli_args, "define", None)
+    toml_defines = toml_config.get("define_macros") if toml_config else None
+    defines = set(cli_defines or toml_defines or [])
+
+    toml_sections = toml_config.get("sections") if toml_config else None
+    if toml_sections is None:
+        toml_sections = {}
+    _ALL_SECTION_KEYS = {
+        "module_description", "module_summary", "inputs", "outputs",
+        "global_data", "local_data", "algorithm", "interface", "appendix",
+    }
+    sections = {k: toml_sections.get(k, True) for k in _ALL_SECTION_KEYS}
+    cli_skip = getattr(cli_args, "skip_sections", None)
+    if cli_skip:
+        for key in cli_skip.split(","):
+            key = key.strip()
+            if key in _ALL_SECTION_KEYS:
+                sections[key] = False
+
+    try:
+        validate_paths(root_dir, analyse_dirs)
+    except ValueError as exc:
+        import argparse as _ap
+        _ap.ArgumentParser().error(str(exc))
+
+    if ai == "on":
+        ensure_ai_config_interactive()
+
+    if lang == "auto":
+        lang = detect_language(root_dir)
+
+    extract_args = argparse.Namespace(
+        root_dir=root_dir,
+        cache_dir=cache_dir,
+        ai=ai,
+        language=lang,
+        analyse_dirs=analyse_dirs,
+        defines=defines,
+    )
+    run_extract_phase(extract_args)
+
+    docgen_args = argparse.Namespace(
+        root_dir=root_dir,
+        analyse_dirs=analyse_dirs,
+        cache_dir=cache_dir,
+        output_folder=output_folder,
+        format=fmt,
+        group_by=group_by,
+        style=style,
+        language=lang,
+        ignore_calls=ignore_calls,
+        ignore_types=ignore_types,
+        ignore_kinds=ignore_kinds,
+        sections=sections,
+    )
+    run_docgen_phase(docgen_args)
+
+    _save_last_cache_dir(cache_dir)
+
+
 def main():
     default_cache_dir = str(get_default_cache_dir())
+
+    # -- top-level TOML config: swift-doc my-config.toml --
+    # Intercept before argparse so the .toml path isn't mistaken for a subcommand.
+    if len(sys.argv) > 1 and sys.argv[1].endswith(".toml") and not sys.argv[1].startswith("-"):
+        config_path = sys.argv[1]
+        if not os.path.isfile(config_path):
+            print(f"Error: config file not found: {config_path}", file=sys.stderr)
+            sys.exit(1)
+        toml_config = load_toml(config_path)
+        doc_type = toml_config.get("type", "moduledesign")
+        if doc_type != "moduledesign":
+            print(f"Error: unknown document type '{doc_type}' in {config_path}", file=sys.stderr)
+            sys.exit(1)
+        # resolve root_dir relative to the config file (supports drag-and-drop)
+        _rd = toml_config.get("root_dir")
+        if _rd and not os.path.isabs(_rd):
+            toml_config["root_dir"] = os.path.normpath(
+                os.path.join(os.path.dirname(os.path.abspath(config_path)), _rd))
+        verbose = "--verbose" in sys.argv
+        if "-v" in sys.argv or "--version" in sys.argv:
+            print(f"swift-doc {VERSION}")
+            sys.exit(0)
+        configure_logging(verbose=verbose)
+        cli_args = argparse.Namespace(root_dir=config_path)
+        _run_moduledesign(cli_args, toml_config_override=toml_config)
+        return
+
     parser = build_parser(default_cache_dir)
     cli_args = parser.parse_args(sys.argv[1:])
+
     # Normalize alias
     if cli_args.command in ("md", "generate"):
         cli_args.command = "moduledesign"
@@ -397,101 +517,12 @@ def main():
         return
 
     if cli_args.command == "moduledesign":
-        # -- resolve config source and root_dir --
-        root_dir, toml_config = _resolve_config_and_root(cli_args)
+        _run_moduledesign(cli_args)
+        return
 
-        # -- merge: CLI > TOML > defaults --
-        lang = _resolve("lang", cli_args, toml_config, _DEFAULTS["lang"])
-        output_folder = _resolve("output_folder", cli_args, toml_config, _DEFAULTS["output_folder"])
-        cache_dir = _resolve("cache_dir", cli_args, toml_config, default_cache_dir)
-        fmt = _resolve("format", cli_args, toml_config, _DEFAULTS["format"])
-        group_by = _resolve("group_by", cli_args, toml_config, _DEFAULTS["group_by"])
-        style = _resolve("style", cli_args, toml_config, _DEFAULTS["style"])
-        ai = _resolve("ai", cli_args, toml_config, _DEFAULTS["ai"])
-
-        # analyse_dirs: CLI list > TOML list > [root_dir]
-        cli_analyse = getattr(cli_args, "analyse_dir", None)
-        toml_analyse = toml_config.get("analyse_dirs") if toml_config else None
-        analyse_dirs = cli_analyse or toml_analyse or [root_dir]
-
-        # ignore sets: CLI list > TOML list
-        cli_ignore_calls = getattr(cli_args, "ignore_calls", None)
-        toml_ignore_calls = toml_config.get("ignore_calls") if toml_config else None
-        ignore_calls = set(cli_ignore_calls or toml_ignore_calls or [])
-
-        cli_ignore_types = getattr(cli_args, "ignore_types", None)
-        toml_ignore_types = toml_config.get("ignore_types") if toml_config else None
-        ignore_types = set(cli_ignore_types or toml_ignore_types or [])
-
-        cli_ignore_kinds = getattr(cli_args, "ignore_kinds", None)
-        toml_ignore_kinds = toml_config.get("ignore_kinds") if toml_config else None
-        ignore_kinds = cli_ignore_kinds or toml_ignore_kinds or []
-
-        # defines: CLI list > TOML list > empty set
-        cli_defines = getattr(cli_args, "define", None)
-        toml_defines = toml_config.get("define_macros") if toml_config else None
-        defines = set(cli_defines or toml_defines or [])
-
-        # sections: start with TOML [sections] (all True default), then CLI --skip-sections overrides
-        toml_sections = toml_config.get("sections") if toml_config else None
-        if toml_sections is None:
-            toml_sections = {}
-        _ALL_SECTION_KEYS = {
-            "module_description", "module_summary", "inputs", "outputs",
-            "global_data", "local_data", "algorithm", "interface", "appendix",
-        }
-        sections = {k: toml_sections.get(k, True) for k in _ALL_SECTION_KEYS}
-        cli_skip = getattr(cli_args, "skip_sections", None)
-        if cli_skip:
-            for key in cli_skip.split(","):
-                key = key.strip()
-                if key in _ALL_SECTION_KEYS:
-                    sections[key] = False
-
-        # -- validate --
-        try:
-            validate_paths(root_dir, analyse_dirs)
-        except ValueError as exc:
-            parser.error(str(exc))
-
-        # -- AI onboarding if needed --
-        if ai == "on":
-            ensure_ai_config_interactive()
-
-        # -- language detection --
-        if lang == "auto":
-            lang = detect_language(root_dir)
-
-        # -- extract phase --
-        extract_args = argparse.Namespace(
-            root_dir=root_dir,
-            cache_dir=cache_dir,
-            ai=ai,
-            language=lang,
-            analyse_dirs=analyse_dirs,
-            defines=defines,
-        )
-        run_extract_phase(extract_args)
-
-        # -- docgen phase --
-        docgen_args = argparse.Namespace(
-            root_dir=root_dir,
-            analyse_dirs=analyse_dirs,
-            cache_dir=cache_dir,
-            output_folder=output_folder,
-            format=fmt,
-            group_by=group_by,
-            style=style,
-            language=lang,
-            ignore_calls=ignore_calls,
-            ignore_types=ignore_types,
-            ignore_kinds=ignore_kinds,
-            sections=sections,
-        )
-        run_docgen_phase(docgen_args)
-
-        # -- remember cache dir for clear-cache --
-        _save_last_cache_dir(cache_dir)
+    # -- no subcommand given --
+    parser.print_help()
+    sys.exit(1)
 
 
 if __name__ == "__main__":
