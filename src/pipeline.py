@@ -1,12 +1,14 @@
 import os
 import json
 import logging
+import shutil
 import sys
 
 from parsers import get_parser
 from generators import get_generator, get_format_extension
 from generators.images import generate_function_graphs
 from core.utils import build_cache_name
+from _version import VERSION
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,19 @@ def run_extract_phase(args):
 
     logger.info(colorize_extract_phase_message("Scanning begins...", EXTRACT_PHASE_START_COLOR))
     logger.info("Language: %s", args.language)
+
+    # -- cache versioning: wipe stale cache when VERSION has changed --
+    version_file = os.path.join(args.cache_dir, ".cache_version")
+    if os.path.isdir(args.cache_dir):
+        try:
+            with open(version_file, "r") as _f:
+                cached_version = _f.read().strip()
+        except (FileNotFoundError, OSError):
+            cached_version = None
+        if cached_version and cached_version != VERSION:
+            logger.info("Version changed (%s → %s), clearing cache", cached_version, VERSION)
+            shutil.rmtree(args.cache_dir)
+
     os.makedirs(args.cache_dir, exist_ok=True)
     enable_ai = getattr(args, "ai", "on") == "on"
 
@@ -78,6 +93,10 @@ def run_extract_phase(args):
     )
 
     logger.info(colorize_extract_phase_message("Analysis completed.", EXTRACT_PHASE_DONE_COLOR))
+
+    # stamp the cache with the current version
+    with open(version_file, "w") as _f:
+        _f.write(VERSION)
 
 
 def run_docgen_phase(args):

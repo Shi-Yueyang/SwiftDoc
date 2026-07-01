@@ -12,6 +12,7 @@ from config.manager import (
     STATE_DIR,
 )
 from config.toml_config import load_toml, find_config, DEFAULT_CONFIG_NAME, DEFAULT_CONFIG_TEMPLATE
+from _version import VERSION
 from parsers import detect_language
 from pipeline import run_extract_phase, run_docgen_phase
 from core.utils import get_default_cache_dir
@@ -161,10 +162,17 @@ def build_parser(default_cache_dir):
     swift-doc md -h
     swift-doc config-ai -h
 """
+    version_str = f"%(prog)s {VERSION}"
     parser = argparse.ArgumentParser(
-        description="Analyze source code, generate documentation, and manage AI configuration",
+        description=f"Analyze source code, generate documentation, and manage AI configuration",
         epilog=examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "-v", "--version",
+        action="version",
+        version=version_str,
+        help="Show version number",
     )
     parser.add_argument(
         "--verbose",
