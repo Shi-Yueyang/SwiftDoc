@@ -4,7 +4,7 @@ import logging
 from collections import defaultdict
 
 from core.utils import iter_progress
-from generators.common import normalize_function_for_doc, load_types, build_type_desc_map
+from generators.common import normalize_function_for_doc, load_types, build_type_desc_map, _extract_base_type_name
 
 
 logger = logging.getLogger(__name__)
@@ -90,19 +90,19 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
     if sections.get("global_data", True):
         global_types = {}
         for inp in inputs:
-            if inp.get("kind") == "Global variable":
-                typ = inp.get("type", "")
-                ref = inp.get("type_ref", "")
-                if typ and ref and ref not in ("", "NA", "N/A"):
-                    if typ not in global_types:
-                        global_types[typ] = ref
+            typ = inp.get("type", "")
+            ref = inp.get("type_ref", "")
+            if typ and ref and ref not in ("", "NA", "N/A"):
+                base_type = _extract_base_type_name(typ)
+                if base_type in type_refs and typ not in global_types:
+                    global_types[typ] = ref
 
         lines.append("### 全局数据结构")
         lines.append("| 类型Type | 参考Ref | 描述Description |")
         lines.append("|----------|---------|------------------|")
         if global_types:
             for typ, ref in global_types.items():
-                base_type = typ.split("[")[0].strip().rstrip("*").strip()
+                base_type = _extract_base_type_name(typ)
                 ref_code = type_refs.get(base_type, ref)
                 desc = type_desc_map.get(base_type, "") or "N/A"
                 lines.append(f"| {typ} | {ref_code} | {desc} |")
@@ -148,7 +148,7 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
 
 
 def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir,
-                                     style="plain", sections=None):
+                                     style="plain", sections=None, local_table=False, language="c"):
     """Generate one .md file per function."""
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -156,10 +156,24 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
 
     for _, _, raw_func in iter_progress(function_list, "Generating markdown"):
         func = normalize_function_for_doc(raw_func)
+
+        # -- local type-ref renumbering --
+        if local_table:
+            from generators.common import build_local_type_refs
+            local_type_refs, local_ref_to_type = build_local_type_refs([raw_func], type_refs)
+        else:
+            local_type_refs = type_refs
+            local_ref_to_type = {}
+
         fname = func.get("name", "unknown_func")
         lines = [f"# {fname}", ""]
-        lines += _write_function_section(func, type_refs, type_desc_map, figures_dir, style=style,
+        lines += _write_function_section(func, local_type_refs, type_desc_map, figures_dir, style=style,
                                          sections=sections)[1:]
+
+        # -- local appendix --
+        if local_table and local_ref_to_type:
+            from generators.markdown.appendix import generate_local_appendix_md
+            lines += generate_local_appendix_md(type_defs, local_ref_to_type, language)
 
         safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
         with open(os.path.join(output_dir, f"{safe_name}.md"), "w", encoding="utf-8") as f:
@@ -167,7 +181,7 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
 
 
 def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir,
-                                 style="plain", sections=None):
+                                 style="plain", sections=None, local_table=False, language="c"):
     """Generate one .md file per source file, grouping functions together."""
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -179,6 +193,14 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
     items = list(grouped.items())
     for _, _, (file_path, funcs) in iter_progress(items, "Generating markdown"):
+        # -- local type-ref renumbering --
+        if local_table:
+            from generators.common import build_local_type_refs
+            local_type_refs, local_ref_to_type = build_local_type_refs(funcs, type_refs)
+        else:
+            local_type_refs = type_refs
+            local_ref_to_type = {}
+
         base = os.path.splitext(os.path.basename(file_path))[0]
         safe_base = base.replace("\\", "_").replace("/", "_").replace(":", "_")
 
@@ -187,10 +209,15 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
-            lines += _write_function_section(func, type_refs, type_desc_map, figures_dir, style=style,
+            lines += _write_function_section(func, local_type_refs, type_desc_map, figures_dir, style=style,
                                              sections=sections)
             lines.append("---")
             lines.append("")
+
+        # -- local appendix --
+        if local_table and local_ref_to_type:
+            from generators.markdown.appendix import generate_local_appendix_md
+            lines += generate_local_appendix_md(type_defs, local_ref_to_type, language)
 
         with open(os.path.join(output_dir, f"{safe_base}.md"), "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
@@ -198,7 +225,7 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
 def generate_function_md(functions_json=None, function_list=None, types_json=None,
                          figures_dir=None, output_dir="MD", group_by="function",
-                         style="plain", sections=None):
+                         style="plain", sections=None, local_table=False, language="c"):
     if function_list is not None:
         functions = function_list
     else:
@@ -215,7 +242,7 @@ def generate_function_md(functions_json=None, function_list=None, types_json=Non
 
     if group_by == "file":
         generate_function_md_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                     sections=sections)
+                                     sections=sections, local_table=local_table, language=language)
     else:
         generate_function_md_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                          sections=sections)
+                                          sections=sections, local_table=local_table, language=language)

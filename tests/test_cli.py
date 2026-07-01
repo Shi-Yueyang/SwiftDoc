@@ -142,7 +142,25 @@ class TestBuildParser:
         ns = p.parse_args(["moduledesign", "/proj", "--skip-sections", "local_data,algorithm"])
         assert ns.skip_sections == "local_data,algorithm"
 
-    def test_md_alias_for_moduledesign(self):
+    def test_local_table_flag_yes(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["moduledesign", "/proj", "--local-table", "yes"])
+        assert ns.local_table == "yes"
+
+    def test_local_table_flag_no(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["moduledesign", "/proj", "--local-table", "no"])
+        assert ns.local_table == "no"
+
+    def test_local_table_not_present_by_default(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["moduledesign", "/proj"])
+        assert not hasattr(ns, "local_table")
+
+    def test_local_table_rejects_invalid_value(self):
+        p = build_parser("/tmp/cache")
+        with pytest.raises(SystemExit):
+            p.parse_args(["moduledesign", "/proj", "--local-table", "maybe"])
         p = build_parser("/tmp/cache")
         ns = p.parse_args(["md", "/proj"])
         assert ns.command == "md"

@@ -268,6 +268,12 @@ def build_parser(default_cache_dir):
         help="Preprocessor macro to mark as defined (repeatable)",
     )
     moduledesign_parser.add_argument(
+        "--local-table",
+        choices=["yes", "no"],
+        default=argparse.SUPPRESS,
+        help="Append a local types reference table per document: yes or no (default: no)",
+    )
+    moduledesign_parser.add_argument(
         "--skip-sections",
         type=str,
         default=argparse.SUPPRESS,
@@ -360,6 +366,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
     group_by = _resolve("group_by", cli_args, toml_config, _DEFAULTS["group_by"])
     style = _resolve("style", cli_args, toml_config, _DEFAULTS["style"])
     ai = _resolve("ai", cli_args, toml_config, _DEFAULTS["ai"])
+    local_table = _resolve("local_table", cli_args, toml_config, "no")
 
     cli_analyse = getattr(cli_args, "analyse_dir", None)
     toml_analyse = toml_config.get("analyse_dirs") if toml_config else None
@@ -431,6 +438,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
         ignore_types=ignore_types,
         ignore_kinds=ignore_kinds,
         sections=sections,
+        local_table=local_table,
     )
     run_docgen_phase(docgen_args)
 

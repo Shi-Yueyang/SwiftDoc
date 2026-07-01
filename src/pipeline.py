@@ -205,6 +205,9 @@ def run_docgen_phase(args):
     if graph_style != "table":
         generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir, style=graph_style)
 
+    local_table = getattr(args, "local_table", "no") == "yes"
+    language = getattr(args, "language", "c")
+
     generator.generate_functions(
         functions_json=None,
         function_list=selected_funcs,
@@ -214,6 +217,8 @@ def run_docgen_phase(args):
         group_by=getattr(args, "group_by", "file"),
         style=graph_style,
         sections=sections,
+        local_table=local_table,
+        language=language,
     )
 
     if sections.get("appendix", True):

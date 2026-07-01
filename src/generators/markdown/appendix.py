@@ -64,3 +64,45 @@ def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(md_lines))
     logger.debug("Appendix saved to %s", output_md_path)
+
+
+def generate_local_appendix_md(type_defs, local_ref_to_type, language="c"):
+    """Return markdown lines for a local types appendix table.
+
+    Parameters
+    ----------
+    type_defs : dict[str, dict]
+        Project-wide type definitions (allows looking up kind/members/values).
+    local_ref_to_type : dict[str, str]
+        Mapping from local ref code (e.g. "A_1") to type name.
+    language : str
+        "c" or "ada" -- controls definition syntax.
+
+    Returns
+    -------
+    list[str]
+        Markdown lines to append to the document.
+    """
+    md_lines: list[str] = []
+    md_lines.append("### Appendix - Local Types Reference")
+    md_lines.append("")
+    md_lines.append("| Reference REF | Identifier | Definition | Description |")
+    md_lines.append("|------------|------------|------------|------------|")
+
+    def sort_key(code: str) -> int:
+        match = re.search(r'A_(\d+)', code)
+        if match:
+            return int(match.group(1))
+        return 0
+
+    for code in sorted(local_ref_to_type, key=sort_key):
+        tname = local_ref_to_type[code]
+        info = type_defs.get(tname, {})
+        definition = generate_definition(tname, info, language=language).replace("\n", "<br>")
+        description = info.get("type_description", "").strip() or "No description"
+        definition_esc = definition.replace("|", "\\|")
+        desc_esc = description.replace("|", "\\|")
+        md_lines.append(f"| {code} | {tname} | {definition_esc} | {desc_esc} |")
+
+    md_lines.append("")
+    return md_lines

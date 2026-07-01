@@ -138,3 +138,47 @@ def generate_appendix_docx(types_json_path: str, output_docx_path: str, filter_t
     os.makedirs(os.path.dirname(output_docx_path), exist_ok=True)
     doc.save(output_docx_path)
     logger.debug("Appendix saved to %s", output_docx_path)
+
+
+def _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language="c"):
+    """Append a local types appendix table to an existing docx document.
+
+    Parameters
+    ----------
+    doc : Document
+        The docx document to append to.
+    type_defs : dict[str, dict]
+        Project-wide type definitions.
+    local_ref_to_type : dict[str, str]
+        Mapping from local ref code (e.g. "A_1") to type name.
+    language : str
+        "c" or "ada" -- controls definition syntax.
+    """
+    doc.add_heading("Appendix - Local Types Reference", level=2)
+
+    table = doc.add_table(rows=1, cols=4)
+    table.style = "Table Grid"
+
+    headers = ["Reference REF", "Identifier", "Definition", "Description"]
+    for i, header in enumerate(headers):
+        _set_cell_text_with_eastasian(table.rows[0].cells[i], header, bold=True)
+        _set_cell_shading(table.rows[0].cells[i], HEADER_SHADING)
+
+    def sort_key(code):
+        match = re.search(r"A_(\d+)", code)
+        if match:
+            return int(match.group(1))
+        return 0
+
+    for code in sorted(local_ref_to_type, key=sort_key):
+        tname = local_ref_to_type[code]
+        info = type_defs.get(tname, {})
+        definition = generate_definition(tname, info, language=language)
+        description = info.get("type_description", "").strip() or "No description"
+        row = table.add_row()
+        _set_cell_text(row.cells[0], code)
+        _set_cell_text(row.cells[1], tname)
+        _set_cell_code(row.cells[2], definition)
+        _set_cell_text_with_eastasian(row.cells[3], description)
+
+    doc.add_paragraph()

@@ -10,7 +10,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 from core.utils import iter_progress
-from generators.common import normalize_function_for_doc, load_types, build_type_desc_map
+from generators.common import normalize_function_for_doc, load_types, build_type_desc_map, _extract_base_type_name
 
 logger = logging.getLogger(__name__)
 
@@ -126,12 +126,12 @@ def _add_output_table(doc, returns, heading_level, return_type=""):
 def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level):
     global_types = {}
     for inp in inputs:
-        if inp.get("kind") == "Global variable":
-            typ = inp.get("type", "")
-            ref = inp.get("type_ref", "")
-            if typ and ref and ref not in ("", "NA", "N/A"):
-                if typ not in global_types:
-                    global_types[typ] = ref
+        typ = inp.get("type", "")
+        ref = inp.get("type_ref", "")
+        if typ and ref and ref not in ("", "NA", "N/A"):
+            base_type = typ.split("[")[0].strip().rstrip("*").strip()
+            if base_type in type_refs and typ not in global_types:
+                global_types[typ] = ref
 
     doc.add_heading("全局数据结构", level=heading_level)
     table = doc.add_table(rows=1, cols=3)
@@ -142,7 +142,7 @@ def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level)
         for typ, ref in global_types.items():
             row = table.add_row()
             _set_cell_text(row.cells[0], typ)
-            base_type = typ.split("[")[0].strip().rstrip("*").strip()
+            base_type = _extract_base_type_name(typ)
             ref_code = type_refs.get(base_type, ref)
             _set_cell_text(row.cells[1], ref_code)
             desc = type_desc_map.get(base_type, "") or "N/A"
@@ -261,24 +261,38 @@ def _sanitize_filename(name):
 
 
 def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir,
-                                        style="plain", sections=None):
+                                        style="plain", sections=None, local_table=False, language="c"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
 
     for _, _, raw_func in iter_progress(function_list, "Generating docx"):
         func = normalize_function_for_doc(raw_func)
+
+        # -- local type-ref renumbering --
+        if local_table:
+            from generators.common import build_local_type_refs
+            local_type_refs, local_ref_to_type = build_local_type_refs([raw_func], type_refs)
+        else:
+            local_type_refs = type_refs
+            local_ref_to_type = {}
+
         fname = func.get("name", "unknown_func")
         doc = _create_document()
-        _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=1,
+        _add_function_section(doc, func, local_type_refs, type_desc_map, figures_dir, heading_level=1,
                               style=style, sections=sections)
+
+        # -- local appendix --
+        if local_table and local_ref_to_type:
+            from generators.docx.appendix import _add_local_appendix_docx
+            _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language)
 
         safe_name = _sanitize_filename(fname)
         doc.save(os.path.join(output_dir, f"{safe_name}.docx"))
 
 
 def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir,
-                                   style="plain", sections=None):
+                                   style="plain", sections=None, local_table=False, language="c"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
@@ -289,6 +303,14 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
     items = list(grouped.items())
     for _, _, (file_path, funcs) in iter_progress(items, "Generating docx"):
+        # -- local type-ref renumbering --
+        if local_table:
+            from generators.common import build_local_type_refs
+            local_type_refs, local_ref_to_type = build_local_type_refs(funcs, type_refs)
+        else:
+            local_type_refs = type_refs
+            local_ref_to_type = {}
+
         base = os.path.splitext(os.path.basename(file_path))[0]
         doc = _create_document()
 
@@ -298,9 +320,14 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
-            _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level=2,
+            _add_function_section(doc, func, local_type_refs, type_desc_map, figures_dir, heading_level=2,
                                   style=style, sections=sections)
             doc.add_page_break()
+
+        # -- local appendix --
+        if local_table and local_ref_to_type:
+            from generators.docx.appendix import _add_local_appendix_docx
+            _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language)
 
         safe_base = _sanitize_filename(base)
         doc.save(os.path.join(output_dir, f"{safe_base}.docx"))
@@ -308,7 +335,7 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
 def generate_function_docx(functions_json=None, function_list=None, types_json=None,
                            figures_dir=None, output_dir="DOCX", group_by="function",
-                           style="plain", sections=None):
+                           style="plain", sections=None, local_table=False, language="c"):
     if function_list is not None:
         functions = function_list
     else:
@@ -325,7 +352,7 @@ def generate_function_docx(functions_json=None, function_list=None, types_json=N
 
     if group_by == "file":
         generate_function_docx_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                       sections=sections)
+                                       sections=sections, local_table=local_table, language=language)
     else:
         generate_function_docx_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                            sections=sections)
+                                            sections=sections, local_table=local_table, language=language)

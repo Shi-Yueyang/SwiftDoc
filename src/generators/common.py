@@ -129,3 +129,57 @@ def build_type_desc_map(type_defs: dict[str, Any]) -> dict[str, str]:
         for tname, info in type_defs.items()
         if isinstance(info, dict) and info.get("type_description")
     }
+
+
+def _extract_base_type_name(type_str: str) -> str:
+    """Strip C/Ada qualifiers, pointers, and array brackets from a type string.
+
+    Returns the bare type name suitable for looking up in type_refs.
+    Examples: "const TaskDesc*" → "TaskDesc", "Point[]" → "Point",
+    "struct MyStruct *" → "MyStruct", "BYTE*" → "BYTE".
+    """
+    _QUALIFIERS = frozenset({
+        "const", "volatile", "static", "extern", "unsigned", "signed",
+        "struct", "enum", "union",
+    })
+    parts = type_str.split()
+    # Find the first meaningful type-name token
+    for part in parts:
+        stripped = part.rstrip("*")
+        if stripped and stripped not in _QUALIFIERS:
+            # Strip array brackets
+            base = stripped.split("[")[0]
+            return base.strip()
+    return type_str.strip()
+
+
+def build_local_type_refs(
+    function_list: list[dict[str, Any]],
+    type_refs: dict[str, str],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Build a per-document local type-reference mapping.
+
+    Scans all function inputs across *function_list* for types that have
+    a project-wide reference in *type_refs*, then assigns local A_1, A_2, ...
+    codes in sorted-by-name order for deterministic output.
+
+    Returns (local_type_refs, local_ref_to_type) where:
+      - local_type_refs: type_name -> "A_N" (for use in rendering)
+      - local_ref_to_type: "A_N" -> type_name (for building the local table)
+    """
+    referenced_types: set[str] = set()
+    for func in function_list:
+        for inp in func.get("inputs", []):
+            base = _extract_base_type_name(inp.get("type", ""))
+            if base and base in type_refs:
+                referenced_types.add(base)
+
+    sorted_types = sorted(referenced_types)
+    local_type_refs: dict[str, str] = {}
+    local_ref_to_type: dict[str, str] = {}
+    for i, tname in enumerate(sorted_types, start=1):
+        code = f"A_{i}"
+        local_type_refs[tname] = code
+        local_ref_to_type[code] = tname
+
+    return local_type_refs, local_ref_to_type
