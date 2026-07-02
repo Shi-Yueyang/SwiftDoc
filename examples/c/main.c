@@ -6,6 +6,7 @@
 
 extern int g_system_ticks;
 extern Status g_last_status;
+static Point g_point;
 
 static void task_sensor_poll(void) {
     SensorData reading;
@@ -71,4 +72,10 @@ int main(void) {
     }
 
     return 0;
+}
+
+static TaskDesc dummy(){
+    TaskDesc ret;
+    int z = g_point.x;
+    return ret;
 }

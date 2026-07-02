@@ -80,7 +80,6 @@ def run_extract_phase(args):
         args.cache_dir,
         enable_ai=enable_ai,
     )
-
     # --- Functions ---
     parser.extract_functions(
         project_root,

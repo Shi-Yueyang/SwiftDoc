@@ -504,6 +504,7 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
             "direction": "in", "type": p["type"],
             "type_ref": get_type_ref(p["type"], type_refs) or "",
         })
+
         if "*" in p["type"]:
             pointer_params.add(p["name"])
 
@@ -539,6 +540,7 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
             type_ref = get_type_ref(gtype, type_refs)
             if type_ref is None:
                 type_ref = ""
+
             inputs.append({
                 "name": gname, "kind": "Global variable",
                 "direction": direction, "type": gtype, "type_ref": type_ref,

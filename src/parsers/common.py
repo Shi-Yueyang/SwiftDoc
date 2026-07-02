@@ -280,7 +280,11 @@ def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", e
 
     logger.debug("Type changes: added=%s modified=%s removed=%s", len(added), len(modified), len(removed))
 
-    master_data = {"description": "", "type_definitions": copy.deepcopy(previous_types)}
+    master_data = {
+        "description": "",
+        "type_definitions": copy.deepcopy(previous_types),
+        "type_references": previous_data.get("type_references", {}),
+    }
     master_types = master_data["type_definitions"]
 
     for type_name in removed.keys():

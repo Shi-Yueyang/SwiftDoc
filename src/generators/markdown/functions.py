@@ -97,6 +97,7 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
                 if base_type in type_refs and typ not in global_types:
                     global_types[typ] = ref
 
+                   
         lines.append("### 全局数据结构")
         lines.append("| 类型Type | 参考Ref | 描述Description |")
         lines.append("|----------|---------|------------------|")

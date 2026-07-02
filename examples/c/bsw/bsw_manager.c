@@ -44,6 +44,7 @@ Status bsw_register_task(const TaskDesc* task) {
         return STATUS_BUSY;
     }
     if (find_task_index(task->name) >= 0) {
+        printf("");
         return STATUS_ERROR;
     }
 
