@@ -194,6 +194,13 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
     removed = diff.get("removed", [])
     changed_functions = [*added, *(item["new"] for item in modified)]
 
+    total_changes = len(added) + len(modified) + len(removed)
+    if total_changes:
+        logger.info("Compared to cache: %s function(s) changed (%s added, %s modified, %s removed)",
+                    total_changes, len(added), len(modified), len(removed))
+    else:
+        logger.info("Compared to cache: no function changes detected")
+
     if enable_ai:
         missing_logic_keys = {
             _func_key(func)
@@ -277,6 +284,13 @@ def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", e
             if is_missing_type_description(previous_types.get(name, {}))
         }
         changed_names = sorted(set(changed_names) | missing_desc_names)
+
+    total_type_changes = len(added) + len(modified) + len(removed)
+    if total_type_changes:
+        logger.info("Compared to cache: %s type(s) changed (%s added, %s modified, %s removed)",
+                    total_type_changes, len(added), len(modified), len(removed))
+    else:
+        logger.info("Compared to cache: no type changes detected")
 
     logger.debug("Type changes: added=%s modified=%s removed=%s", len(added), len(modified), len(removed))
 

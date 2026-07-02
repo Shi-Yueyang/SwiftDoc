@@ -112,8 +112,15 @@ def normalize_function_for_doc(func: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def load_types(types_json: str | None) -> tuple[dict[str, Any], dict[str, Any]]:
-    if types_json and os.path.exists(types_json):
+def load_types(types_json: str | dict | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    if types_json is None:
+        return {}, {}
+    if isinstance(types_json, dict):
+        return (
+            types_json.get("type_definitions", {}),
+            types_json.get("type_references", {}),
+        )
+    if os.path.exists(types_json):
         with open(types_json, "r", encoding="utf-8") as f:
             data = json.load(f)
         return (

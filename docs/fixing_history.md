@@ -10,3 +10,5 @@ Historical bugs that have been fixed in this codebase, and the patterns to avoid
 6. **Global variable direction**: Two values: `in` (read-only) or `in out` (written at all). No `out`-only for globals.
 7. **Pointer parameter direction**: Three-way: `in` (read-only), `out` (write-only), `in out` (both read and written).
 8. **Preprocessor-broken functions**: ``#ifdef`` blocks with unbalanced braces can produce ERROR nodes in tree-sitter. The approach is **preprocessing** — use ``--define MACRO`` (or ``[define] macros`` in TOML) to tell the tool which macros are active so it can resolve ``#ifdef`` / ``#ifndef`` before parsing. Any remaining ERROR nodes after preprocessing are logged as warnings. No silent rescue attempts — the user is told exactly what's wrong.
+9. inputs change don't trigger auto update.
+10. type filtering  can't detect inputs.

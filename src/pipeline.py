@@ -210,7 +210,7 @@ def run_docgen_phase(args):
     generator.generate_functions(
         functions_json=None,
         function_list=selected_funcs,
-        types_json=types_json,
+        types_json=types_data,
         figures_dir=figures_dir,
         output_dir=output_folder,
         group_by=getattr(args, "group_by", "file"),

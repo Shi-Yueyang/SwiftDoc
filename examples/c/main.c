@@ -74,7 +74,7 @@ int main(void) {
     return 0;
 }
 
-static TaskDesc dummy(){
+static TaskDesc dummy(PowerState e){
     TaskDesc ret;
     int z = g_point.x;
     return ret;

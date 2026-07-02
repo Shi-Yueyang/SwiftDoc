@@ -14,6 +14,29 @@ logger = logging.getLogger(__name__)
 _STRUCTURAL_TYPE_KEYS = frozenset({"kind", "members", "values", "original_type"})
 
 
+def _signature_changed(old_func, new_func):
+    """Return True if the function signature (parameters or return type) changed.
+
+    Compares return_type and the parameter list (name, type, direction),
+    ignoring global-variable inputs which are derived from the body.
+    """
+    if old_func.get("return_type") != new_func.get("return_type"):
+        return True
+
+    def _param_key(inp):
+        return (inp.get("name"), inp.get("type"), inp.get("direction"))
+
+    old_params = sorted(
+        _param_key(i) for i in old_func.get("inputs", [])
+        if i.get("kind") == "parameter"
+    )
+    new_params = sorted(
+        _param_key(i) for i in new_func.get("inputs", [])
+        if i.get("kind") == "parameter"
+    )
+    return old_params != new_params
+
+
 def compare_functions(old_funcs, new_funcs):
     """Compare two function lists and return added, modified, and removed.
 
@@ -48,7 +71,7 @@ def compare_functions(old_funcs, new_funcs):
             matched_new.add(key)
             old_body = old_func.get("normalized_body", "")
             new_body = new_func.get("normalized_body", "")
-            if old_body != new_body:
+            if old_body != new_body or _signature_changed(old_func, new_func):
                 modified.append({"old": old_func, "new": new_func})
 
     # Rename correlation: if a removed function has the same normalized_body

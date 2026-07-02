@@ -151,3 +151,80 @@ class TestCompareTypes:
         assert new_list[0]["algorithm_logic"] == "logic"
         assert new_list[0].get("_renamed_from") == "old_func"
 
+    def test_param_type_change_triggers_modification(self):
+        old = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        new = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "float", "direction": "in"},
+        ]}]
+        result = compare_functions(old, new)
+        assert len(result["modified"]) == 1
+
+    def test_param_name_change_triggers_modification(self):
+        old = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        new = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "y", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        result = compare_functions(old, new)
+        assert len(result["modified"]) == 1
+
+    def test_param_direction_change_triggers_modification(self):
+        old = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "p", "kind": "parameter", "type": "int*", "direction": "in"},
+        ]}]
+        new = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "p", "kind": "parameter", "type": "int*", "direction": "out"},
+        ]}]
+        result = compare_functions(old, new)
+        assert len(result["modified"]) == 1
+
+    def test_return_type_change_triggers_modification(self):
+        old = [{"name": "foo", "return_type": "int", "normalized_body": "body"}]
+        new = [{"name": "foo", "return_type": "void", "normalized_body": "body"}]
+        result = compare_functions(old, new)
+        assert len(result["modified"]) == 1
+
+    def test_param_added_triggers_modification(self):
+        old = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        new = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "int", "direction": "in"},
+            {"name": "y", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        result = compare_functions(old, new)
+        assert len(result["modified"]) == 1
+
+    def test_signature_unchanged_body_same_not_modified(self):
+        old = [{"name": "foo", "return_type": "int", "normalized_body": "body", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        new = [{"name": "foo", "return_type": "int", "normalized_body": "body", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        result = compare_functions(old, new)
+        assert result["modified"] == []
+
+    def test_global_var_input_change_ignored_in_signature(self):
+        old = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "g_flag", "kind": "Global variable", "type": "int", "direction": "in"},
+        ]}]
+        new = [{"name": "foo", "normalized_body": "body", "inputs": [
+            {"name": "g_flag", "kind": "Global variable", "type": "int", "direction": "in out"},
+        ]}]
+        result = compare_functions(old, new)
+        assert result["modified"] == []
+
+    def test_body_and_signature_both_change(self):
+        old = [{"name": "foo", "return_type": "int", "normalized_body": "old", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "int", "direction": "in"},
+        ]}]
+        new = [{"name": "foo", "return_type": "void", "normalized_body": "new", "inputs": [
+            {"name": "x", "kind": "parameter", "type": "float", "direction": "out"},
+        ]}]
+        result = compare_functions(old, new)
+        assert len(result["modified"]) == 1
+
