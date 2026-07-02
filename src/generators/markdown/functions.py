@@ -96,8 +96,14 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
                 base_type = _extract_base_type_name(typ)
                 if base_type in type_refs and typ not in global_types:
                     global_types[typ] = ref
+        # Also include the return type if it references a known global type
+        return_type = func.get("return_type", "")
+        if return_type:
+            base_type = _extract_base_type_name(return_type)
+            if base_type in type_refs and return_type not in global_types:
+                global_types[return_type] = type_refs[base_type]
 
-                   
+
         lines.append("### 全局数据结构")
         lines.append("| 类型Type | 参考Ref | 描述Description |")
         lines.append("|----------|---------|------------------|")

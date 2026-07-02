@@ -123,15 +123,22 @@ def _add_output_table(doc, returns, heading_level, return_type=""):
     doc.add_paragraph()
 
 
-def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level):
+def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level,
+                          return_type=""):
     global_types = {}
+    # Collect from inputs (parameters + global variables)
     for inp in inputs:
         typ = inp.get("type", "")
         ref = inp.get("type_ref", "")
         if typ and ref and ref not in ("", "NA", "N/A"):
-            base_type = typ.split("[")[0].strip().rstrip("*").strip()
+            base_type = _extract_base_type_name(typ)
             if base_type in type_refs and typ not in global_types:
                 global_types[typ] = ref
+    # Also include the return type if it references a known global type
+    if return_type:
+        base_type = _extract_base_type_name(return_type)
+        if base_type in type_refs and return_type not in global_types:
+            global_types[return_type] = type_refs[base_type]
 
     doc.add_heading("全局数据结构", level=heading_level)
     table = doc.add_table(rows=1, cols=3)
@@ -247,7 +254,9 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
         _add_output_table(doc, func.get("returns", []), heading_level + 1,
                           return_type=func.get("return_type", ""))
     if sections.get("global_data", True):
-        _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map, heading_level + 1)
+        _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map,
+                              heading_level + 1,
+                              return_type=func.get("return_type", ""))
     if sections.get("local_data", True):
         _add_local_data_table(doc, heading_level + 1)
     if sections.get("algorithm", True):
