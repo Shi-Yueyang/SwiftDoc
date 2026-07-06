@@ -1,6 +1,5 @@
 import os
 import re
-import json
 import logging
 from typing import Dict, Any, List, Tuple, Optional, Set
 
@@ -10,15 +9,8 @@ from generators.common import generate_definition
 logger = logging.getLogger(__name__)
 
 
-def generate_appendix_md(types_json_path: str, output_md_path: str, filter_types: Optional[Set[str]] = None, language: str = "c", types_data_override: dict = None) -> None:
-    if types_data_override is not None:
-        data = types_data_override
-    elif os.path.exists(types_json_path):
-        with open(types_json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    else:
-        logger.warning("Types cache file not found: %s", types_json_path)
-        return
+def generate_appendix_md(types_data: dict, output_md_path: str, filter_types: Optional[Set[str]] = None, language: str = "c") -> None:
+    data = types_data
     type_defs = data.get("type_definitions", {})
     type_refs = data.get("type_references", {})
 

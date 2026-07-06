@@ -26,6 +26,7 @@ _DEFAULTS = {
     "group_by": "file",
     "style": "plain",
     "ai": "off",
+    "out_param_location": "inputs",
 }
 
 
@@ -274,6 +275,12 @@ def build_parser(default_cache_dir):
         help="Append a local types reference table per document: yes or no (default: no)",
     )
     moduledesign_parser.add_argument(
+        "--out-param-location",
+        choices=["inputs", "outputs"],
+        default=argparse.SUPPRESS,
+        help="Where to place out-only pointer params in the doc: inputs or outputs (default: inputs)",
+    )
+    moduledesign_parser.add_argument(
         "--skip-sections",
         type=str,
         default=argparse.SUPPRESS,
@@ -367,6 +374,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
     style = _resolve("style", cli_args, toml_config, _DEFAULTS["style"])
     ai = _resolve("ai", cli_args, toml_config, _DEFAULTS["ai"])
     local_table = _resolve("local_table", cli_args, toml_config, "no")
+    out_param_location = _resolve("out_param_location", cli_args, toml_config, _DEFAULTS["out_param_location"])
 
     cli_analyse = getattr(cli_args, "analyse_dir", None)
     toml_analyse = toml_config.get("analyse_dirs") if toml_config else None
@@ -439,6 +447,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
         ignore_kinds=ignore_kinds,
         sections=sections,
         local_table=local_table,
+        out_param_location=out_param_location,
     )
     run_docgen_phase(docgen_args)
 

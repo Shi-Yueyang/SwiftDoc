@@ -121,6 +121,8 @@ def sample_functions():
                 {"name": "argc", "kind": "parameter", "direction": "in", "type": "int", "type_ref": ""},
                 {"name": "argv", "kind": "parameter", "direction": "in", "type": "char**", "type_ref": ""},
                 {"name": "global_mode", "kind": "Global variable", "direction": "in", "type": "int", "type_ref": ""},
+                {"name": "result", "kind": "parameter", "direction": "out", "type": "int*", "type_ref": "", "inputs_description": "Output buffer for result"},
+                {"name": "buffer", "kind": "parameter", "direction": "in out", "type": "char*", "type_ref": "", "inputs_description": "Buffer to read and modify"},
             ],
             "returns": [{"expression": "0", "return_description": "Success exit code"}],
             "body_code": "return 0;",

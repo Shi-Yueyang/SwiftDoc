@@ -1,4 +1,3 @@
-import json
 import os
 import logging
 from collections import defaultdict
@@ -10,7 +9,7 @@ from generators.common import normalize_function_for_doc, load_types, build_type
 logger = logging.getLogger(__name__)
 
 
-def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="plain", sections=None):
+def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="plain", sections=None, out_param_location="inputs"):
     """Return a list of markdown lines for a single function section."""
     if sections is None:
         sections = {}
@@ -54,8 +53,11 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
         lines.append("### 输入项")
         lines.append("| 标识符ID | 类型Type | 输入方式Input mode | 数据方向Direction of data | 描述Description |")
         lines.append("|----------|----------|--------------------|---------------------------|------------------|")
-        if inputs:
-            for inp in inputs:
+        display_inputs = inputs
+        if out_param_location == "outputs":
+            display_inputs = [inp for inp in inputs if inp.get("direction") != "out"]
+        if display_inputs:
+            for inp in display_inputs:
                 name = inp.get("name", "N/A")
                 typ = inp.get("type", "N/A")
                 mode = "Parameter" if inp.get("kind") == "parameter" else "Global variable"
@@ -72,16 +74,20 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
         lines.append("| 标识符ID | 类型Type | 输出方式Output mode | 描述Description |")
         lines.append("|----------|----------|---------------------|------------------|")
         returns = func.get("returns", [])
-        if returns and isinstance(returns, list):
-            valid_returns = [ret for ret in returns if ret.get("expression") or ret.get("return_description")]
-            if valid_returns:
-                for ret in valid_returns:
-                    expr = ret.get("expression", "")
-                    ret_desc = ret.get("return_description", "") or "N/A"
-                    ret_type = func.get("return_type", "") or "N/A"
-                    lines.append(f"| {expr} | {ret_type} | Return | {ret_desc} |")
-            else:
-                lines.append("| N/A | N/A | N/A | N/A |")
+        out_params = [inp for inp in inputs if inp.get("direction") == "out"] if out_param_location == "outputs" else []
+        has_returns = returns and isinstance(returns, list)
+        valid_returns = [ret for ret in returns if ret.get("expression") or ret.get("return_description")] if has_returns else []
+        if valid_returns or out_params:
+            for ret in valid_returns:
+                expr = ret.get("expression", "")
+                ret_desc = ret.get("return_description", "") or "N/A"
+                ret_type = func.get("return_type", "") or "N/A"
+                lines.append(f"| {expr} | {ret_type} | Return | {ret_desc} |")
+            for inp in out_params:
+                name = inp.get("name", "N/A")
+                typ = inp.get("type", "N/A")
+                desc = inp.get("inputs_description", "") or "N/A"
+                lines.append(f"| {name} | {typ} | out parameter | {desc} |")
         else:
             lines.append("| N/A | N/A | N/A | N/A |")
         lines.append("")
@@ -112,7 +118,7 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
                 base_type = _extract_base_type_name(typ)
                 ref_code = type_refs.get(base_type, ref)
                 desc = type_desc_map.get(base_type, "") or "N/A"
-                lines.append(f"| {typ} | {ref_code} | {desc} |")
+                lines.append(f"| {base_type} | {ref_code} | {desc} |")
         else:
             lines.append("| N/A | N/A | N/A |")
         lines.append("")
@@ -155,7 +161,8 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
 
 
 def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir,
-                                     style="plain", sections=None, local_table=False, language="c"):
+                                     style="plain", sections=None, local_table=False, language="c",
+                                     out_param_location="inputs"):
     """Generate one .md file per function."""
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -175,7 +182,7 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
         fname = func.get("name", "unknown_func")
         lines = [f"# {fname}", ""]
         lines += _write_function_section(func, local_type_refs, type_desc_map, figures_dir, style=style,
-                                         sections=sections)[1:]
+                                         sections=sections, out_param_location=out_param_location)[1:]
 
         # -- local appendix --
         if local_table and local_ref_to_type:
@@ -188,7 +195,8 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
 
 
 def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir,
-                                 style="plain", sections=None, local_table=False, language="c"):
+                                 style="plain", sections=None, local_table=False, language="c",
+                                 out_param_location="inputs"):
     """Generate one .md file per source file, grouping functions together."""
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -217,7 +225,7 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
             lines += _write_function_section(func, local_type_refs, type_desc_map, figures_dir, style=style,
-                                             sections=sections)
+                                             sections=sections, out_param_location=out_param_location)
             lines.append("---")
             lines.append("")
 
@@ -230,26 +238,16 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
             f.write("\n".join(lines))
 
 
-def generate_function_md(functions_json=None, function_list=None, types_json=None,
-                         figures_dir=None, output_dir="MD", group_by="function",
-                         style="plain", sections=None, local_table=False, language="c"):
-    if function_list is not None:
-        functions = function_list
-    else:
-        if functions_json is None:
-            raise ValueError("Either functions_json or function_list must be provided")
-        with open(functions_json, "r", encoding="utf-8") as f:
-            func_data = json.load(f)
-        functions = func_data.get("functions", [])
-
-    if types_json is None:
-        raise ValueError("types_json must be provided")
-    if figures_dir is None:
-        raise ValueError("figures_dir must be provided")
+def generate_function_md(function_list, types_json, figures_dir, output_dir="MD",
+                         group_by="function", style="plain", sections=None,
+                         local_table=False, language="c", out_param_location="inputs"):
+    functions = function_list
 
     if group_by == "file":
         generate_function_md_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                     sections=sections, local_table=local_table, language=language)
+                                     sections=sections, local_table=local_table, language=language,
+                                     out_param_location=out_param_location)
     else:
         generate_function_md_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                          sections=sections, local_table=local_table, language=language)
+                                          sections=sections, local_table=local_table, language=language,
+                                          out_param_location=out_param_location)

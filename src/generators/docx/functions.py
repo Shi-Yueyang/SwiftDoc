@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 from collections import defaultdict
 
@@ -93,7 +92,7 @@ def _add_input_table(doc, inputs, heading_level):
     doc.add_paragraph()
 
 
-def _add_output_table(doc, returns, heading_level, return_type=""):
+def _add_output_table(doc, returns, heading_level, return_type="", out_params=None):
     doc.add_heading("输出项", level=heading_level)
     table = doc.add_table(rows=1, cols=4)
     table.style = "Table Grid"
@@ -102,19 +101,23 @@ def _add_output_table(doc, returns, heading_level, return_type=""):
     ])
 
     ret_type_text = return_type or "N/A"
-    if returns and isinstance(returns, list):
-        valid = [r for r in returns if r.get("expression") or r.get("return_description")]
-        if valid:
-            for ret in valid:
-                row = table.add_row()
-                _set_cell_text(row.cells[0], ret.get("expression", ""))
-                _set_cell_text(row.cells[1], ret_type_text)
-                _set_cell_text(row.cells[2], "Return")
-                _set_cell_text(row.cells[3], ret.get("return_description", "") or "N/A")
-        else:
+    if out_params is None:
+        out_params = []
+    has_returns = returns and isinstance(returns, list)
+    valid_returns = [r for r in returns if r.get("expression") or r.get("return_description")] if has_returns else []
+    if valid_returns or out_params:
+        for ret in valid_returns:
             row = table.add_row()
-            for cell in row.cells:
-                _set_cell_text(cell, "N/A")
+            _set_cell_text(row.cells[0], ret.get("expression", ""))
+            _set_cell_text(row.cells[1], ret_type_text)
+            _set_cell_text(row.cells[2], "Return")
+            _set_cell_text(row.cells[3], ret.get("return_description", "") or "N/A")
+        for inp in out_params:
+            row = table.add_row()
+            _set_cell_text(row.cells[0], inp.get("name", "N/A"))
+            _set_cell_text(row.cells[1], inp.get("type", "N/A"))
+            _set_cell_text(row.cells[2], "out parameter")
+            _set_cell_text(row.cells[3], inp.get("inputs_description", "") or "N/A")
     else:
         row = table.add_row()
         for cell in row.cells:
@@ -148,7 +151,7 @@ def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level,
     if global_types:
         for typ, ref in global_types.items():
             row = table.add_row()
-            _set_cell_text(row.cells[0], typ)
+            _set_cell_text(row.cells[0], base_type)
             base_type = _extract_base_type_name(typ)
             ref_code = type_refs.get(base_type, ref)
             _set_cell_text(row.cells[1], ref_code)
@@ -208,7 +211,7 @@ def _add_call_graph(doc, func, fname, figures_dir, heading_level, style="plain")
 
 
 def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, heading_level,
-                         style="plain", sections=None):
+                         style="plain", sections=None, out_param_location="inputs"):
     if sections is None:
         sections = {}
     fname = func.get("name", "unknown_func")
@@ -249,10 +252,15 @@ def _add_function_section(doc, func, type_refs, type_desc_map, figures_dir, head
         doc.add_paragraph()
 
     if sections.get("inputs", True):
-        _add_input_table(doc, func.get("inputs", []), heading_level + 1)
+        all_inputs = func.get("inputs", [])
+        display_inputs = all_inputs
+        if out_param_location == "outputs":
+            display_inputs = [inp for inp in all_inputs if inp.get("direction") != "out"]
+        _add_input_table(doc, display_inputs, heading_level + 1)
     if sections.get("outputs", True):
+        out_params = [inp for inp in func.get("inputs", []) if inp.get("direction") == "out"] if out_param_location == "outputs" else []
         _add_output_table(doc, func.get("returns", []), heading_level + 1,
-                          return_type=func.get("return_type", ""))
+                          return_type=func.get("return_type", ""), out_params=out_params)
     if sections.get("global_data", True):
         _add_global_data_table(doc, func.get("inputs", []), type_refs, type_desc_map,
                               heading_level + 1,
@@ -270,7 +278,8 @@ def _sanitize_filename(name):
 
 
 def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir,
-                                        style="plain", sections=None, local_table=False, language="c"):
+                                        style="plain", sections=None, local_table=False, language="c",
+                                        out_param_location="inputs"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
@@ -289,7 +298,7 @@ def generate_function_docx_per_function(function_list, types_json, figures_dir, 
         fname = func.get("name", "unknown_func")
         doc = _create_document()
         _add_function_section(doc, func, local_type_refs, type_desc_map, figures_dir, heading_level=1,
-                              style=style, sections=sections)
+                              style=style, sections=sections, out_param_location=out_param_location)
 
         # -- local appendix --
         if local_table and local_ref_to_type:
@@ -301,7 +310,8 @@ def generate_function_docx_per_function(function_list, types_json, figures_dir, 
 
 
 def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir,
-                                   style="plain", sections=None, local_table=False, language="c"):
+                                   style="plain", sections=None, local_table=False, language="c",
+                                   out_param_location="inputs"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
     os.makedirs(output_dir, exist_ok=True)
@@ -330,7 +340,7 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
             _add_function_section(doc, func, local_type_refs, type_desc_map, figures_dir, heading_level=2,
-                                  style=style, sections=sections)
+                                  style=style, sections=sections, out_param_location=out_param_location)
             doc.add_page_break()
 
         # -- local appendix --
@@ -342,26 +352,16 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
         doc.save(os.path.join(output_dir, f"{safe_base}.docx"))
 
 
-def generate_function_docx(functions_json=None, function_list=None, types_json=None,
-                           figures_dir=None, output_dir="DOCX", group_by="function",
-                           style="plain", sections=None, local_table=False, language="c"):
-    if function_list is not None:
-        functions = function_list
-    else:
-        if functions_json is None:
-            raise ValueError("Either functions_json or function_list must be provided")
-        with open(functions_json, "r", encoding="utf-8") as f:
-            func_data = json.load(f)
-        functions = func_data.get("functions", [])
-
-    if types_json is None:
-        raise ValueError("types_json must be provided")
-    if figures_dir is None:
-        raise ValueError("figures_dir must be provided")
+def generate_function_docx(function_list, types_json, figures_dir, output_dir="DOCX",
+                           group_by="function", style="plain", sections=None,
+                           local_table=False, language="c", out_param_location="inputs"):
+    functions = function_list
 
     if group_by == "file":
         generate_function_docx_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                       sections=sections, local_table=local_table, language=language)
+                                       sections=sections, local_table=local_table, language=language,
+                                       out_param_location=out_param_location)
     else:
         generate_function_docx_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                            sections=sections, local_table=local_table, language=language)
+                                            sections=sections, local_table=local_table, language=language,
+                                            out_param_location=out_param_location)

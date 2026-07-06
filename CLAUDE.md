@@ -97,6 +97,8 @@ CLI uses `argparse.SUPPRESS` for all moduledesign-command arguments so we can di
 
 **Cache is source-of-truth.** Extraction produces complete, unfiltered data. Filtering (`--ignore-calls`, `--ignore-types`) happens at docgen time only. Never bake presentation concerns into the cache JSON.
 
+**No backward-compatibility cruft.** Don't keep dual-mode APIs (file-path vs. in-memory) when only one mode has callers. If a parameter or code path is dead, delete it. Single-purpose, clean signatures over "might be useful later" flexibility.
+
 **tree-sitter node identity is unreliable.** `node is other` and `node == other` can both fail. Always compare `start_byte` positions.
 
 ## Known Bugs

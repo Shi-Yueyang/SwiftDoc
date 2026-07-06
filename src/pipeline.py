@@ -206,9 +206,9 @@ def run_docgen_phase(args):
 
     local_table = getattr(args, "local_table", "no") == "yes"
     language = getattr(args, "language", "c")
+    out_param_location = getattr(args, "out_param_location", "inputs")
 
     generator.generate_functions(
-        functions_json=None,
         function_list=selected_funcs,
         types_json=types_data,
         figures_dir=figures_dir,
@@ -218,13 +218,14 @@ def run_docgen_phase(args):
         sections=sections,
         local_table=local_table,
         language=language,
+        out_param_location=out_param_location,
     )
 
     if sections.get("appendix", True):
         appendix_ext = get_format_extension(output_format)
         appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
-        generator.generate_appendix(None, appendix_output, filter_types=None,
-                                    language=getattr(args, "language", "c"),
-                                    types_data_override=types_data)
+        generator.generate_appendix(types_data, appendix_output,
+                                    filter_types=None,
+                                    language=getattr(args, "language", "c"))
 
     logger.info(colorize_extract_phase_message("It's done.", EXTRACT_PHASE_DONE_COLOR))

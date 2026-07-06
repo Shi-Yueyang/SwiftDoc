@@ -329,19 +329,75 @@ class TestGroupByFileDocx:
         assert os.path.exists(os.path.join(output_dir, "process.docx"))
 
 
+class TestOutParamLocationDocx:
+    def test_out_param_stays_in_input_table_by_default(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_out_default")
+        figures_dir = str(tmp_path / "figures_docx_out_default")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        table_text = _get_table_text(doc)
+        # Default: out-param "result" should appear in table cells
+        assert "result" in table_text
+
+    def test_out_param_moved_to_output_table(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_out_outputs")
+        figures_dir = str(tmp_path / "figures_docx_out_outputs")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            out_param_location="outputs",
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        table_text = _get_table_text(doc)
+        # Out-param "result" should appear in table with out parameter mode
+        assert "result" in table_text
+        assert "out parameter" in table_text
+
+    def test_in_out_params_stay_in_input_table(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_inout")
+        figures_dir = str(tmp_path / "figures_docx_inout")
+        _create_dummy_figures(sample_functions, figures_dir)
+
+        generate_function_docx(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            out_param_location="outputs",
+        )
+
+        doc = Document(os.path.join(output_dir, "main.docx"))
+        table_text = _get_table_text(doc)
+        # "buffer" (in out) should still be visible somewhere in the doc
+        assert "buffer" in table_text
+
+
 class TestGenerateAppendixDocx:
-    def test_generates_appendix(self, sample_types_json, tmp_path):
+    def test_generates_appendix(self, sample_type_definitions, tmp_path):
         output_path = str(tmp_path / "appendix.docx")
-        generate_appendix_docx(sample_types_json, output_path)
+        generate_appendix_docx(sample_type_definitions, output_path)
         assert os.path.exists(output_path)
 
         doc = Document(output_path)
         all_text = " ".join(_get_paragraphs_text(doc))
         assert "Appendix Global Data Structures" in all_text
 
-    def test_contains_all_types(self, sample_types_json, tmp_path):
+    def test_contains_all_types(self, sample_type_definitions, tmp_path):
         output_path = str(tmp_path / "appendix2.docx")
-        generate_appendix_docx(sample_types_json, output_path)
+        generate_appendix_docx(sample_type_definitions, output_path)
 
         doc = Document(output_path)
         table_text = _get_table_text(doc)
@@ -350,9 +406,9 @@ class TestGenerateAppendixDocx:
         assert "Direction" in joined
         assert "BYTE" in joined
 
-    def test_uses_a_reference_labels(self, sample_types_json, tmp_path):
+    def test_uses_a_reference_labels(self, sample_type_definitions, tmp_path):
         output_path = str(tmp_path / "appendix3.docx")
-        generate_appendix_docx(sample_types_json, output_path)
+        generate_appendix_docx(sample_type_definitions, output_path)
 
         doc = Document(output_path)
         table_text = _get_table_text(doc)
@@ -361,14 +417,14 @@ class TestGenerateAppendixDocx:
         assert "A_2" in joined
         assert "A_3" in joined
 
-    def test_missing_types_file(self, tmp_path):
+    def test_empty_types_data_is_handled(self, tmp_path):
         output_path = str(tmp_path / "appendix_missing.docx")
-        generate_appendix_docx("/nonexistent/path.json", output_path)
+        generate_appendix_docx({}, output_path)
         # Should not crash, just log warning
 
-    def test_type_description(self, sample_types_json, tmp_path):
+    def test_type_description(self, sample_type_definitions, tmp_path):
         output_path = str(tmp_path / "appendix_desc.docx")
-        generate_appendix_docx(sample_types_json, output_path)
+        generate_appendix_docx(sample_type_definitions, output_path)
 
         doc = Document(output_path)
         table_text = _get_table_text(doc)

@@ -161,9 +161,26 @@ class TestBuildParser:
         p = build_parser("/tmp/cache")
         with pytest.raises(SystemExit):
             p.parse_args(["moduledesign", "/proj", "--local-table", "maybe"])
+
+    def test_out_param_location_defaults(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["md", "/proj"])
-        assert ns.command == "md"
+        ns = p.parse_args(["moduledesign", "/proj"])
+        assert not hasattr(ns, "out_param_location")
+
+    def test_out_param_location_inputs(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["moduledesign", "/proj", "--out-param-location", "inputs"])
+        assert ns.out_param_location == "inputs"
+
+    def test_out_param_location_outputs(self):
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["moduledesign", "/proj", "--out-param-location", "outputs"])
+        assert ns.out_param_location == "outputs"
+
+    def test_out_param_location_rejects_invalid_value(self):
+        p = build_parser("/tmp/cache")
+        with pytest.raises(SystemExit):
+            p.parse_args(["moduledesign", "/proj", "--out-param-location", "both"])
 
     def test_parser_has_createconfig_subcommand(self):
         p = build_parser("/tmp/cache")

@@ -497,10 +497,90 @@ class TestGroupByFile:
         assert os.path.exists(os.path.join(output_dir, "process.md"))
 
 
+class TestOutParamLocationMD:
+    def test_out_param_stays_in_input_table_by_default(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_out_default")
+        figures_dir = str(tmp_path / "figures_out_default")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            img_path = os.path.join(figures_dir, f"{func['name']}.png")
+            with open(img_path, "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        main_md = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        # Default: out-param "result" should appear in input table
+        assert "result" in main_md
+        # "out" direction text should be visible in the input area
+        in_section = main_md.split("### 输入项")[1].split("### 输出项")[0] if "### 输入项" in main_md else ""
+        assert "| result |" in in_section
+        # The output table should NOT contain "result" (it's in the input table)
+        out_section = main_md.split("### 输出项")[1] if "### 输出项" in main_md else ""
+        assert "result" not in out_section or "| result |" not in out_section
+
+    def test_out_param_moved_to_output_table(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_out_outputs")
+        figures_dir = str(tmp_path / "figures_out_outputs")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            img_path = os.path.join(figures_dir, f"{func['name']}.png")
+            with open(img_path, "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            out_param_location="outputs",
+        )
+
+        main_md = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        # Out-param "result" should NOT be in input table
+        in_section = main_md.split("### 输入项")[1].split("### 输出项")[0] if "### 输入项" in main_md else ""
+        assert "result" not in in_section or "| result |" not in in_section
+        # Out-param "result" should be in output table with out parameter mode
+        out_section = main_md.split("### 输出项")[1] if "### 输出项" in main_md else ""
+        assert "| result |" in out_section
+        assert "out parameter" in out_section
+
+    def test_in_out_params_stay_in_input_table(self, sample_functions, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_inout")
+        figures_dir = str(tmp_path / "figures_inout")
+        os.makedirs(figures_dir)
+        for func in sample_functions:
+            img_path = os.path.join(figures_dir, f"{func['name']}.png")
+            with open(img_path, "w") as f:
+                f.write("dummy")
+
+        generate_function_md(
+            function_list=sample_functions,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+            out_param_location="outputs",
+        )
+
+        main_md = open(os.path.join(output_dir, "main.md"), "r", encoding="utf-8").read()
+        # "buffer" has direction "in out" — should stay in input table regardless
+        assert "buffer" in main_md
+        in_section = main_md.split("### 输入项")[1].split("### 输出项")[0] if "### 输入项" in main_md else ""
+        assert "| buffer |" in in_section
+        # "buffer" should NOT be in output table
+        out_section = main_md.split("### 输出项")[1] if "### 输出项" in main_md else ""
+        assert "buffer" not in out_section or "| buffer |" not in out_section
+
+
 class TestGenerateAppendixMd:
-    def test_generates_appendix(self, sample_types_json, tmp_path):
+    def test_generates_appendix(self, sample_type_definitions, tmp_path):
         output_path = str(tmp_path / "appendix.md")
-        generate_appendix_md(sample_types_json, output_path)
+        generate_appendix_md(sample_type_definitions, output_path)
         assert os.path.exists(output_path)
         content = open(output_path, "r", encoding="utf-8").read()
         assert "Appendix Global Data Structures" in content
@@ -508,22 +588,22 @@ class TestGenerateAppendixMd:
         assert "Direction" in content
         assert "BYTE" in content
 
-    def test_uses_a_reference_labels(self, sample_types_json, tmp_path):
+    def test_uses_a_reference_labels(self, sample_type_definitions, tmp_path):
         output_path = str(tmp_path / "appendix2.md")
-        generate_appendix_md(sample_types_json, output_path)
+        generate_appendix_md(sample_type_definitions, output_path)
         content = open(output_path, "r", encoding="utf-8").read()
         assert "A_1" in content
         assert "A_2" in content
         assert "A_3" in content
 
-    def test_missing_types_file(self, tmp_path):
+    def test_empty_types_data_is_handled(self, tmp_path):
         output_path = str(tmp_path / "appendix_missing.md")
-        generate_appendix_md("/nonexistent/path.json", output_path)
-        # Should not crash, just log warning
+        generate_appendix_md({}, output_path)
+        # Should not crash, just log warning and return early
 
-    def test_type_description(self, sample_types_json, tmp_path):
+    def test_type_description(self, sample_type_definitions, tmp_path):
         output_path = str(tmp_path / "appendix_desc.md")
-        generate_appendix_md(sample_types_json, output_path)
+        generate_appendix_md(sample_type_definitions, output_path)
         content = open(output_path, "r", encoding="utf-8").read()
         assert "2D coordinate point" in content
 

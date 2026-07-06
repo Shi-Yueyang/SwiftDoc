@@ -3,8 +3,9 @@ Generator registry for swift-doc.
 
 Add new output formats by creating a package (e.g., generators/html/) and registering it here.
 A generator package must export:
-    generate_functions(function_list, types_json, figures_dir, output_dir) -> None
-    generate_appendix(types_json, output_path, filter_types=None) -> None
+    generate_functions(function_list, types_json, figures_dir, output_dir, **kwargs) -> None
+    Accepted kwargs: group_by, style, sections, local_table, language, out_param_location
+    generate_appendix(types_data, output_path, **kwargs) -> None
 """
 
 from generators import docx, markdown
