@@ -74,8 +74,9 @@ int main(void) {
     return 0;
 }
 
-static TaskDesc dummy(const PowerState* e){
+static TaskDesc dummy(const PowerState* e, int* pure_out){
     TaskDesc ret;
+    *pure_out = 2;
     int z = g_point.x;
     return ret;
 }
