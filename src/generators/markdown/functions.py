@@ -161,7 +161,7 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
 
 
 def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir,
-                                     style="plain", sections=None, local_table=False, language="c",
+                                     style="plain", sections=None, embedded_global_reference=False, language="c",
                                      out_param_location="inputs"):
     """Generate one .md file per function."""
     type_defs, type_refs = load_types(types_json)
@@ -171,23 +171,23 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
     for _, _, raw_func in iter_progress(function_list, "Generating markdown"):
         func = normalize_function_for_doc(raw_func)
 
-        # -- local type-ref renumbering --
-        if local_table:
-            from generators.common import build_local_type_refs
-            local_type_refs, local_ref_to_type = build_local_type_refs([raw_func], type_refs)
+        # -- embedded type-ref renumbering --
+        if embedded_global_reference:
+            from generators.common import build_embedded_type_refs
+            embedded_type_refs, embedded_ref_to_type = build_embedded_type_refs([raw_func], type_refs)
         else:
-            local_type_refs = type_refs
-            local_ref_to_type = {}
+            embedded_type_refs = type_refs
+            embedded_ref_to_type = {}
 
         fname = func.get("name", "unknown_func")
         lines = [f"# {fname}", ""]
-        lines += _write_function_section(func, local_type_refs, type_desc_map, figures_dir, style=style,
+        lines += _write_function_section(func, embedded_type_refs, type_desc_map, figures_dir, style=style,
                                          sections=sections, out_param_location=out_param_location)[1:]
 
-        # -- local appendix --
-        if local_table and local_ref_to_type:
-            from generators.markdown.appendix import generate_local_appendix_md
-            lines += generate_local_appendix_md(type_defs, local_ref_to_type, language)
+        # -- embedded appendix --
+        if embedded_global_reference and embedded_ref_to_type:
+            from generators.markdown.appendix import generate_embedded_appendix_md
+            lines += generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language)
 
         safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
         with open(os.path.join(output_dir, f"{safe_name}.md"), "w", encoding="utf-8") as f:
@@ -195,7 +195,7 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
 
 
 def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir,
-                                 style="plain", sections=None, local_table=False, language="c",
+                                 style="plain", sections=None, embedded_global_reference=False, language="c",
                                  out_param_location="inputs"):
     """Generate one .md file per source file, grouping functions together."""
     type_defs, type_refs = load_types(types_json)
@@ -209,12 +209,12 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
     items = list(grouped.items())
     for _, _, (file_path, funcs) in iter_progress(items, "Generating markdown"):
         # -- local type-ref renumbering --
-        if local_table:
-            from generators.common import build_local_type_refs
-            local_type_refs, local_ref_to_type = build_local_type_refs(funcs, type_refs)
+        if embedded_global_reference:
+            from generators.common import build_embedded_type_refs
+            embedded_type_refs, embedded_ref_to_type = build_embedded_type_refs(funcs, type_refs)
         else:
-            local_type_refs = type_refs
-            local_ref_to_type = {}
+            embedded_type_refs = type_refs
+            embedded_ref_to_type = {}
 
         base = os.path.splitext(os.path.basename(file_path))[0]
         safe_base = base.replace("\\", "_").replace("/", "_").replace(":", "_")
@@ -224,15 +224,15 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
-            lines += _write_function_section(func, local_type_refs, type_desc_map, figures_dir, style=style,
+            lines += _write_function_section(func, embedded_type_refs, type_desc_map, figures_dir, style=style,
                                              sections=sections, out_param_location=out_param_location)
             lines.append("---")
             lines.append("")
 
-        # -- local appendix --
-        if local_table and local_ref_to_type:
-            from generators.markdown.appendix import generate_local_appendix_md
-            lines += generate_local_appendix_md(type_defs, local_ref_to_type, language)
+        # -- embedded appendix --
+        if embedded_global_reference and embedded_ref_to_type:
+            from generators.markdown.appendix import generate_embedded_appendix_md
+            lines += generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language)
 
         with open(os.path.join(output_dir, f"{safe_base}.md"), "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
@@ -240,14 +240,14 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
 def generate_function_md(function_list, types_json, figures_dir, output_dir="MD",
                          group_by="function", style="plain", sections=None,
-                         local_table=False, language="c", out_param_location="inputs"):
+                         embedded_global_reference=False, language="c", out_param_location="inputs"):
     functions = function_list
 
     if group_by == "file":
         generate_function_md_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                     sections=sections, local_table=local_table, language=language,
+                                     sections=sections, embedded_global_reference=embedded_global_reference, language=language,
                                      out_param_location=out_param_location)
     else:
         generate_function_md_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                          sections=sections, local_table=local_table, language=language,
+                                          sections=sections, embedded_global_reference=embedded_global_reference, language=language,
                                           out_param_location=out_param_location)

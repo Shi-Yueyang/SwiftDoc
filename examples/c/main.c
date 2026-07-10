@@ -75,8 +75,14 @@ int main(void) {
 }
 
 static TaskDesc dummy(const PowerState* e, int* pure_out){
+    PowerState test = *e;
     TaskDesc ret;
     *pure_out = 2;
     int z = g_point.x;
+    return ret;
+}
+
+static WORD dummy2(){
+    WORD ret;
     return ret;
 }

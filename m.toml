@@ -10,7 +10,7 @@ root_dir = "."
 # format = "docx"            # "docx" | "markdown"
 # group_by = "file"          # "file" | "function"
 # style = "plain"            # "plain" | "slate" | "fearless" | "red" | "table"
-# local_table = "no"          # "yes" | "no": append local types table per document
+# embedded_global_reference = "no"          # "yes" | "no": embed renumbered type references per document
 # out_param_location = "inputs"  # "inputs" | "outputs": where to place out-only pointer params
 
 # --- Extraction options ---

@@ -6,7 +6,7 @@ from generators.common import (
     normalize_function_for_doc,
     remove_c_comments,
     generate_definition,
-    build_local_type_refs,
+    build_embedded_type_refs,
 )
 from generators.markdown.functions import (
     generate_function_md,
@@ -608,23 +608,23 @@ class TestGenerateAppendixMd:
         assert "2D coordinate point" in content
 
 
-class TestBuildLocalTypeRefs:
+class TestBuildEmbeddedTypeRefs:
     def test_empty_functions(self):
-        local_refs, ref_to_type = build_local_type_refs([], {})
-        assert local_refs == {}
+        embedded_refs, ref_to_type = build_embedded_type_refs([], {})
+        assert embedded_refs == {}
         assert ref_to_type == {}
 
     def test_no_type_refs_matches(self):
         funcs = [{"inputs": [{"name": "x", "kind": "parameter", "type": "int"}]}]
-        local_refs, ref_to_type = build_local_type_refs(funcs, {})
-        assert local_refs == {}
+        embedded_refs, ref_to_type = build_embedded_type_refs(funcs, {})
+        assert embedded_refs == {}
         assert ref_to_type == {}
 
     def test_parameter_type_matched(self):
         type_refs = {"Point": "A_3", "Direction": "A_2"}
         funcs = [{"inputs": [{"name": "p", "kind": "parameter", "type": "Point", "type_ref": "A_3"}]}]
-        local_refs, ref_to_type = build_local_type_refs(funcs, type_refs)
-        assert local_refs == {"Point": "A_1"}
+        embedded_refs, ref_to_type = build_embedded_type_refs(funcs, type_refs)
+        assert embedded_refs == {"Point": "A_1"}
         assert ref_to_type == {"A_1": "Point"}
 
     def test_global_variable_type_matched(self):
@@ -632,8 +632,8 @@ class TestBuildLocalTypeRefs:
         funcs = [{"inputs": [
             {"name": "g_dev", "kind": "Global variable", "type": "DeviceConfig", "type_ref": "A_5"},
         ]}]
-        local_refs, ref_to_type = build_local_type_refs(funcs, type_refs)
-        assert local_refs == {"DeviceConfig": "A_1"}
+        embedded_refs, ref_to_type = build_embedded_type_refs(funcs, type_refs)
+        assert embedded_refs == {"DeviceConfig": "A_1"}
         assert ref_to_type == {"A_1": "DeviceConfig"}
 
     def test_global_variable_with_pointer_type(self):
@@ -641,8 +641,8 @@ class TestBuildLocalTypeRefs:
         funcs = [{"inputs": [
             {"name": "g_ptr", "kind": "Global variable", "type": "MyStruct *", "type_ref": "A_2"},
         ]}]
-        local_refs, ref_to_type = build_local_type_refs(funcs, type_refs)
-        assert local_refs == {"MyStruct": "A_1"}
+        embedded_refs, ref_to_type = build_embedded_type_refs(funcs, type_refs)
+        assert embedded_refs == {"MyStruct": "A_1"}
         assert ref_to_type == {"A_1": "MyStruct"}
 
     def test_multiple_types_sorted(self):
@@ -651,8 +651,8 @@ class TestBuildLocalTypeRefs:
             {"name": "a", "kind": "parameter", "type": "Alpha", "type_ref": "A_1"},
             {"name": "z", "kind": "parameter", "type": "Zebra", "type_ref": "A_10"},
         ]}]
-        local_refs, ref_to_type = build_local_type_refs(funcs, type_refs)
-        assert local_refs == {"Alpha": "A_1", "Zebra": "A_2"}
+        embedded_refs, ref_to_type = build_embedded_type_refs(funcs, type_refs)
+        assert embedded_refs == {"Alpha": "A_1", "Zebra": "A_2"}
         assert ref_to_type == {"A_1": "Alpha", "A_2": "Zebra"}
 
     def test_unknown_type_skipped(self):
@@ -661,9 +661,9 @@ class TestBuildLocalTypeRefs:
             {"name": "k", "kind": "parameter", "type": "Known", "type_ref": "A_1"},
             {"name": "u", "kind": "parameter", "type": "Unknown", "type_ref": ""},
         ]}]
-        local_refs, ref_to_type = build_local_type_refs(funcs, type_refs)
-        assert "Unknown" not in local_refs
-        assert "Known" in local_refs
+        embedded_refs, ref_to_type = build_embedded_type_refs(funcs, type_refs)
+        assert "Unknown" not in embedded_refs
+        assert "Known" in embedded_refs
 
     def test_across_multiple_functions(self):
         type_refs = {"A": "A_1", "B": "A_2", "C": "A_3"}
@@ -671,7 +671,7 @@ class TestBuildLocalTypeRefs:
             {"inputs": [{"name": "x", "kind": "parameter", "type": "A", "type_ref": "A_1"}]},
             {"inputs": [{"name": "y", "kind": "parameter", "type": "B", "type_ref": "A_2"}]},
         ]
-        local_refs, ref_to_type = build_local_type_refs(funcs, type_refs)
-        assert local_refs == {"A": "A_1", "B": "A_2"}
-        assert len(local_refs) == 2
-        assert "C" not in local_refs
+        embedded_refs, ref_to_type = build_embedded_type_refs(funcs, type_refs)
+        assert embedded_refs == {"A": "A_1", "B": "A_2"}
+        assert len(embedded_refs) == 2
+        assert "C" not in embedded_refs

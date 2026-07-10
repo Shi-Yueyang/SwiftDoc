@@ -269,10 +269,10 @@ def build_parser(default_cache_dir):
         help="Preprocessor macro to mark as defined (repeatable)",
     )
     moduledesign_parser.add_argument(
-        "--local-table",
+        "--embedded-global-reference",
         choices=["yes", "no"],
         default=argparse.SUPPRESS,
-        help="Append a local types reference table per document: yes or no (default: no)",
+        help="Embed the global type references in each document with renumbered A_1, A_2, ... codes (default: no)",
     )
     moduledesign_parser.add_argument(
         "--out-param-location",
@@ -373,7 +373,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
     group_by = _resolve("group_by", cli_args, toml_config, _DEFAULTS["group_by"])
     style = _resolve("style", cli_args, toml_config, _DEFAULTS["style"])
     ai = _resolve("ai", cli_args, toml_config, _DEFAULTS["ai"])
-    local_table = _resolve("local_table", cli_args, toml_config, "no")
+    embedded_global_reference = _resolve("embedded_global_reference", cli_args, toml_config, "no")
     out_param_location = _resolve("out_param_location", cli_args, toml_config, _DEFAULTS["out_param_location"])
 
     cli_analyse = getattr(cli_args, "analyse_dir", None)
@@ -446,7 +446,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
         ignore_types=ignore_types,
         ignore_kinds=ignore_kinds,
         sections=sections,
-        local_table=local_table,
+        embedded_global_reference=embedded_global_reference,
         out_param_location=out_param_location,
     )
     run_docgen_phase(docgen_args)

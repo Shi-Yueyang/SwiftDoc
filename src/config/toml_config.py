@@ -17,7 +17,7 @@ else:
 _TOP_LEVEL_KEYS = {
     "root_dir", "lang", "output_folder", "cache_dir",
     "format", "group_by", "style", "ai", "analyse_dirs", "type",
-    "local_table", "out_param_location",
+    "embedded_global_reference", "out_param_location",
 }
 
 # Keys that appear under [ignore]
@@ -40,7 +40,7 @@ root_dir = "."
 # format = "docx"            # "docx" | "markdown"
 # group_by = "file"          # "file" | "function"
 # style = "plain"            # "plain" | "slate" | "fearless" | "red" | "table"
-# local_table = "no"          # "yes" | "no": append local types table per document
+# embedded_global_reference = "no"          # "yes" | "no": embed renumbered type references per document
 # out_param_location = "inputs"  # "inputs" | "outputs": where to place out-only pointer params
 
 # --- Extraction options ---

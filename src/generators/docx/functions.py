@@ -278,7 +278,7 @@ def _sanitize_filename(name):
 
 
 def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir,
-                                        style="plain", sections=None, local_table=False, language="c",
+                                        style="plain", sections=None, embedded_global_reference=False, language="c",
                                         out_param_location="inputs"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -288,29 +288,29 @@ def generate_function_docx_per_function(function_list, types_json, figures_dir, 
         func = normalize_function_for_doc(raw_func)
 
         # -- local type-ref renumbering --
-        if local_table:
-            from generators.common import build_local_type_refs
-            local_type_refs, local_ref_to_type = build_local_type_refs([raw_func], type_refs)
+        if embedded_global_reference:
+            from generators.common import build_embedded_type_refs
+            embedded_type_refs, embedded_ref_to_type = build_embedded_type_refs([raw_func], type_refs)
         else:
-            local_type_refs = type_refs
-            local_ref_to_type = {}
+            embedded_type_refs = type_refs
+            embedded_ref_to_type = {}
 
         fname = func.get("name", "unknown_func")
         doc = _create_document()
-        _add_function_section(doc, func, local_type_refs, type_desc_map, figures_dir, heading_level=1,
+        _add_function_section(doc, func, embedded_type_refs, type_desc_map, figures_dir, heading_level=1,
                               style=style, sections=sections, out_param_location=out_param_location)
 
-        # -- local appendix --
-        if local_table and local_ref_to_type:
-            from generators.docx.appendix import _add_local_appendix_docx
-            _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language)
+        # -- embedded appendix --
+        if embedded_global_reference and embedded_ref_to_type:
+            from generators.docx.appendix import _add_embedded_appendix_docx
+            _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language)
 
         safe_name = _sanitize_filename(fname)
         doc.save(os.path.join(output_dir, f"{safe_name}.docx"))
 
 
 def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir,
-                                   style="plain", sections=None, local_table=False, language="c",
+                                   style="plain", sections=None, embedded_global_reference=False, language="c",
                                    out_param_location="inputs"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -323,12 +323,12 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
     items = list(grouped.items())
     for _, _, (file_path, funcs) in iter_progress(items, "Generating docx"):
         # -- local type-ref renumbering --
-        if local_table:
-            from generators.common import build_local_type_refs
-            local_type_refs, local_ref_to_type = build_local_type_refs(funcs, type_refs)
+        if embedded_global_reference:
+            from generators.common import build_embedded_type_refs
+            embedded_type_refs, embedded_ref_to_type = build_embedded_type_refs(funcs, type_refs)
         else:
-            local_type_refs = type_refs
-            local_ref_to_type = {}
+            embedded_type_refs = type_refs
+            embedded_ref_to_type = {}
 
         base = os.path.splitext(os.path.basename(file_path))[0]
         doc = _create_document()
@@ -339,14 +339,14 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
         for raw_func in funcs:
             func = normalize_function_for_doc(raw_func)
-            _add_function_section(doc, func, local_type_refs, type_desc_map, figures_dir, heading_level=2,
+            _add_function_section(doc, func, embedded_type_refs, type_desc_map, figures_dir, heading_level=2,
                                   style=style, sections=sections, out_param_location=out_param_location)
             doc.add_page_break()
 
-        # -- local appendix --
-        if local_table and local_ref_to_type:
-            from generators.docx.appendix import _add_local_appendix_docx
-            _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language)
+        # -- embedded appendix --
+        if embedded_global_reference and embedded_ref_to_type:
+            from generators.docx.appendix import _add_embedded_appendix_docx
+            _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language)
 
         safe_base = _sanitize_filename(base)
         doc.save(os.path.join(output_dir, f"{safe_base}.docx"))
@@ -354,14 +354,14 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
 def generate_function_docx(function_list, types_json, figures_dir, output_dir="DOCX",
                            group_by="function", style="plain", sections=None,
-                           local_table=False, language="c", out_param_location="inputs"):
+                           embedded_global_reference=False, language="c", out_param_location="inputs"):
     functions = function_list
 
     if group_by == "file":
         generate_function_docx_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                       sections=sections, local_table=local_table, language=language,
+                                       sections=sections, embedded_global_reference=embedded_global_reference, language=language,
                                        out_param_location=out_param_location)
     else:
         generate_function_docx_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                            sections=sections, local_table=local_table, language=language,
+                                            sections=sections, embedded_global_reference=embedded_global_reference, language=language,
                                             out_param_location=out_param_location)

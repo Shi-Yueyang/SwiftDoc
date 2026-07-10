@@ -10,6 +10,7 @@ from typing import Any
 
 
 def remove_c_comments(text: str) -> str:
+    """Strip C-style comments and normalize whitespace."""
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
     text = re.sub(r"//.*?(?=\n|$)", "", text, flags=re.MULTILINE)
     text = re.sub(r"[ \t]+", " ", text)
@@ -25,6 +26,7 @@ def generate_definition(type_name: str, info: dict[str, Any], language: str = "c
 
 
 def _generate_c_definition(type_name: str, info: dict[str, Any]) -> str:
+    """Build a C typedef declaration string from a type's kind (struct/union/enum/typedef)."""
     kind = info.get("kind", "unknown")
     if kind == "struct":
         members = info.get("members", [])
@@ -54,6 +56,7 @@ def _generate_c_definition(type_name: str, info: dict[str, Any]) -> str:
 
 
 def _generate_ada_definition(type_name: str, info: dict[str, Any]) -> str:
+    """Build an Ada type declaration string from a type's kind (record/enumeration/subtype/...)."""
     kind = info.get("kind", "unknown")
     if kind == "record":
         members = info.get("members", [])
@@ -79,6 +82,7 @@ def _generate_ada_definition(type_name: str, info: dict[str, Any]) -> str:
 
 
 def normalize_function_for_doc(func: dict[str, Any]) -> dict[str, Any]:
+    """Fill in defaults for optional function fields so generators don't need to guard against missing keys."""
     normalized = dict(func)
     normalized.setdefault("algorithm_logic", "")
     normalized.setdefault("module_summary", "")
@@ -113,6 +117,7 @@ def normalize_function_for_doc(func: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_types(types_json: str | dict | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load type_definitions and type_references from a JSON file path or dict."""
     if types_json is None:
         return {}, {}
     if isinstance(types_json, dict):
@@ -131,6 +136,7 @@ def load_types(types_json: str | dict | None) -> tuple[dict[str, Any], dict[str,
 
 
 def build_type_desc_map(type_defs: dict[str, Any]) -> dict[str, str]:
+    """Build a type_name -> type_description lookup from type definitions."""
     return {
         tname: info.get("type_description", "")
         for tname, info in type_defs.items()
@@ -160,19 +166,19 @@ def _extract_base_type_name(type_str: str) -> str:
     return type_str.strip()
 
 
-def build_local_type_refs(
+def build_embedded_type_refs(
     function_list: list[dict[str, Any]],
     type_refs: dict[str, str],
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """Build a per-document local type-reference mapping.
+    """Build a per-document embedded type-reference mapping.
 
     Scans all function inputs across *function_list* for types that have
-    a project-wide reference in *type_refs*, then assigns local A_1, A_2, ...
+    a project-wide reference in *type_refs*, then assigns embedded A_1, A_2, ...
     codes in sorted-by-name order for deterministic output.
 
-    Returns (local_type_refs, local_ref_to_type) where:
-      - local_type_refs: type_name -> "A_N" (for use in rendering)
-      - local_ref_to_type: "A_N" -> type_name (for building the local table)
+    Returns (embedded_type_refs, embedded_ref_to_type) where:
+      - embedded_type_refs: type_name -> "A_N" (for use in rendering)
+      - embedded_ref_to_type: "A_N" -> type_name (for building the embedded table)
     """
     referenced_types: set[str] = set()
     for func in function_list:
@@ -182,11 +188,11 @@ def build_local_type_refs(
                 referenced_types.add(base)
 
     sorted_types = sorted(referenced_types)
-    local_type_refs: dict[str, str] = {}
-    local_ref_to_type: dict[str, str] = {}
+    embedded_type_refs: dict[str, str] = {}
+    embedded_ref_to_type: dict[str, str] = {}
     for i, tname in enumerate(sorted_types, start=1):
         code = f"A_{i}"
-        local_type_refs[tname] = code
-        local_ref_to_type[code] = tname
+        embedded_type_refs[tname] = code
+        embedded_ref_to_type[code] = tname
 
-    return local_type_refs, local_ref_to_type
+    return embedded_type_refs, embedded_ref_to_type

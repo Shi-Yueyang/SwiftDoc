@@ -99,11 +99,9 @@ CLI uses `argparse.SUPPRESS` for all moduledesign-command arguments so we can di
 
 **No backward-compatibility cruft.** Don't keep dual-mode APIs (file-path vs. in-memory) when only one mode has callers. If a parameter or code path is dead, delete it. Single-purpose, clean signatures over "might be useful later" flexibility.
 
+**Use type annotations.** All new and modified Python code should include type annotations (PEP 484) on function signatures, method signatures, and module-level variables where the type isn't obvious. Use `from __future__ import annotations` when needed for forward references. Leverage standard library types (`list`, `dict`, `tuple`, `Optional`, `Union`) and TypedDict for structured data shapes already defined in `parsers/types.py`.
+
 **tree-sitter node identity is unreliable.** `node is other` and `node == other` can both fail. Always compare `start_byte` positions.
-
-## Known Bugs
-
-Historical bugs and patterns to watch are documented in [KNOWN_BUGS.md](KNOWN_BUGS.md).
 
 ## Communication Style
 

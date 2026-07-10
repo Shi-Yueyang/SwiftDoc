@@ -142,25 +142,25 @@ class TestBuildParser:
         ns = p.parse_args(["moduledesign", "/proj", "--skip-sections", "local_data,algorithm"])
         assert ns.skip_sections == "local_data,algorithm"
 
-    def test_local_table_flag_yes(self):
+    def test_embedded_global_reference_flag_yes(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--local-table", "yes"])
-        assert ns.local_table == "yes"
+        ns = p.parse_args(["moduledesign", "/proj", "--embedded-global-reference", "yes"])
+        assert ns.embedded_global_reference == "yes"
 
-    def test_local_table_flag_no(self):
+    def test_embedded_global_reference_flag_no(self):
         p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--local-table", "no"])
-        assert ns.local_table == "no"
+        ns = p.parse_args(["moduledesign", "/proj", "--embedded-global-reference", "no"])
+        assert ns.embedded_global_reference == "no"
 
-    def test_local_table_not_present_by_default(self):
+    def test_embedded_global_reference_not_present_by_default(self):
         p = build_parser("/tmp/cache")
         ns = p.parse_args(["moduledesign", "/proj"])
-        assert not hasattr(ns, "local_table")
+        assert not hasattr(ns, "embedded_global_reference")
 
-    def test_local_table_rejects_invalid_value(self):
+    def test_embedded_global_reference_rejects_invalid_value(self):
         p = build_parser("/tmp/cache")
         with pytest.raises(SystemExit):
-            p.parse_args(["moduledesign", "/proj", "--local-table", "maybe"])
+            p.parse_args(["moduledesign", "/proj", "--embedded-global-reference", "maybe"])
 
     def test_out_param_location_defaults(self):
         p = build_parser("/tmp/cache")

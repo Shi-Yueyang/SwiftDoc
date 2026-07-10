@@ -58,15 +58,15 @@ def generate_appendix_md(types_data: dict, output_md_path: str, filter_types: Op
     logger.debug("Appendix saved to %s", output_md_path)
 
 
-def generate_local_appendix_md(type_defs, local_ref_to_type, language="c"):
-    """Return markdown lines for a local types appendix table.
+def generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language="c"):
+    """Return markdown lines for an embedded types appendix table.
 
     Parameters
     ----------
     type_defs : dict[str, dict]
         Project-wide type definitions (allows looking up kind/members/values).
-    local_ref_to_type : dict[str, str]
-        Mapping from local ref code (e.g. "A_1") to type name.
+    embedded_ref_to_type : dict[str, str]
+        Mapping from embedded ref code (e.g. "A_1") to type name.
     language : str
         "c" or "ada" -- controls definition syntax.
 
@@ -76,7 +76,7 @@ def generate_local_appendix_md(type_defs, local_ref_to_type, language="c"):
         Markdown lines to append to the document.
     """
     md_lines: list[str] = []
-    md_lines.append("### Appendix - Local Types Reference")
+    md_lines.append("### Appendix - Embedded Type References")
     md_lines.append("")
     md_lines.append("| Reference REF | Identifier | Definition | Description |")
     md_lines.append("|------------|------------|------------|------------|")
@@ -87,8 +87,8 @@ def generate_local_appendix_md(type_defs, local_ref_to_type, language="c"):
             return int(match.group(1))
         return 0
 
-    for code in sorted(local_ref_to_type, key=sort_key):
-        tname = local_ref_to_type[code]
+    for code in sorted(embedded_ref_to_type, key=sort_key):
+        tname = embedded_ref_to_type[code]
         info = type_defs.get(tname, {})
         definition = generate_definition(tname, info, language=language).replace("\n", "<br>")
         description = info.get("type_description", "").strip() or "No description"

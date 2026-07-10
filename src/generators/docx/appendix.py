@@ -132,8 +132,8 @@ def generate_appendix_docx(types_data: dict, output_docx_path: str, filter_types
     logger.debug("Appendix saved to %s", output_docx_path)
 
 
-def _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language="c"):
-    """Append a local types appendix table to an existing docx document.
+def _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language="c"):
+    """Append an embedded types appendix table to an existing docx document.
 
     Parameters
     ----------
@@ -141,12 +141,12 @@ def _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language="c"):
         The docx document to append to.
     type_defs : dict[str, dict]
         Project-wide type definitions.
-    local_ref_to_type : dict[str, str]
-        Mapping from local ref code (e.g. "A_1") to type name.
+    embedded_ref_to_type : dict[str, str]
+        Mapping from embedded ref code (e.g. "A_1") to type name.
     language : str
         "c" or "ada" -- controls definition syntax.
     """
-    doc.add_heading("Appendix - Local Types Reference", level=2)
+    doc.add_heading("Appendix - Embedded Type References", level=2)
 
     table = doc.add_table(rows=1, cols=4)
     table.style = "Table Grid"
@@ -162,8 +162,8 @@ def _add_local_appendix_docx(doc, type_defs, local_ref_to_type, language="c"):
             return int(match.group(1))
         return 0
 
-    for code in sorted(local_ref_to_type, key=sort_key):
-        tname = local_ref_to_type[code]
+    for code in sorted(embedded_ref_to_type, key=sort_key):
+        tname = embedded_ref_to_type[code]
         info = type_defs.get(tname, {})
         definition = generate_definition(tname, info, language=language)
         description = info.get("type_description", "").strip() or "No description"

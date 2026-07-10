@@ -99,11 +99,18 @@ def run_extract_phase(args):
 
 
 def run_docgen_phase(args):
+    """Generate documentation from cached extraction data.
+
+    Pipeline: resolve args → load caches → filter → generate docs + appendix.
+    All filtering happens at docgen time; cache JSONs stay unfiltered.
+    """
+    # ── Step 1: resolve generator and output format ──
     output_format = getattr(args, "format", "docx")
     generator = get_generator(output_format)
 
     logger.info(colorize_extract_phase_message("Generating docs...", EXTRACT_PHASE_START_COLOR))
 
+    # ── Step 2: resolve paths (cache dir, root dir, analyse dirs, output folder) ──
     cache_dir = args.cache_dir
     root_dir = args.root_dir
     if hasattr(args, "analyse_dirs"):
@@ -112,6 +119,7 @@ def run_docgen_phase(args):
         analyse_dirs = [getattr(args, "analyse_dir", root_dir)]
     output_folder = args.output_folder
 
+    # ── Step 3: build cache file paths and load types cache ──
     normalized_project_dir = os.path.normpath(root_dir)
     analysis_paths = build_analysis_paths(cache_dir, normalized_project_dir)
     types_json = analysis_paths["types"]
@@ -125,7 +133,7 @@ def run_docgen_phase(args):
             types_data = json.load(f)
     type_refs = types_data.get("type_references", {})
 
-    # Apply type filtering (docgen-time — cache stays unfiltered)
+    # ── Step 4: apply type filtering (--ignore-types, --ignore-kinds) ──
     ignore_types = getattr(args, "ignore_types", None)
     ignore_kinds = getattr(args, "ignore_kinds", [])
     if ignore_types or ignore_kinds:
@@ -137,6 +145,7 @@ def run_docgen_phase(args):
                 type_defs.pop(tname, None)
                 type_refs.pop(tname, None)
 
+    # ── Step 5: load functions cache and filter by analyse_dirs ──
     if not os.path.exists(functions_json):
         logger.warning("Functions cache file not found: %s", functions_json)
         all_functions = []
@@ -160,14 +169,14 @@ def run_docgen_phase(args):
         logger.warning("No functions found under %s", analyse_dirs)
         return
 
-    # Apply call filtering (docgen-time — cache stays unfiltered)
+    # ── Step 6: apply call filtering (--ignore-calls) ──
     ignore_calls = getattr(args, "ignore_calls", None)
     if ignore_calls:
         ignored_c = set(ignore_calls)
         for func in selected_funcs:
             func["calls"] = [c for c in func.get("calls", []) if c not in ignored_c]
 
-    # Scrub type_refs for global-variable inputs whose type is ignored
+    # ── Step 7: scrub type_refs on ignored global-variable inputs ──
     ignore_types = getattr(args, "ignore_types", None)
     if ignore_types:
         ignored_t = set(ignore_types)
@@ -178,6 +187,7 @@ def run_docgen_phase(args):
                     if base in ignored_t:
                         inp["type_ref"] = ""
 
+    # ── Step 8: collect types referenced by selected functions' inputs ──
     used_type_names = set()
     for func in selected_funcs:
         for inp in func.get("inputs", []):
@@ -189,10 +199,10 @@ def run_docgen_phase(args):
                 if word in type_refs:
                     used_type_names.add(word)
 
+    # ── Step 9: configure generator options ──
     figures_dir = os.path.join(output_folder, "figures")
     graph_style = getattr(args, "style", "plain")
 
-    # Section toggles — defaults to all-enabled
     _ALL_SECTION_KEYS = {
         "module_description", "module_summary", "inputs", "outputs",
         "global_data", "local_data", "algorithm", "interface", "appendix",
@@ -201,13 +211,15 @@ def run_docgen_phase(args):
     if sections is None:
         sections = {k: True for k in _ALL_SECTION_KEYS}
 
-    if graph_style != "table":
-        generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir, style=graph_style)
-
-    local_table = getattr(args, "local_table", "no") == "yes"
+    embedded_global_reference = getattr(args, "embedded_global_reference", "no") == "yes"
     language = getattr(args, "language", "c")
     out_param_location = getattr(args, "out_param_location", "inputs")
 
+    # ── Step 10: render call-graph images (skip for table style) ──
+    if graph_style != "table":
+        generate_function_graphs(function_list=selected_funcs, output_dir=figures_dir, style=graph_style)
+
+    # ── Step 11: generate per-function / per-file documents ──
     generator.generate_functions(
         function_list=selected_funcs,
         types_json=types_data,
@@ -216,11 +228,12 @@ def run_docgen_phase(args):
         group_by=getattr(args, "group_by", "file"),
         style=graph_style,
         sections=sections,
-        local_table=local_table,
+        embedded_global_reference=embedded_global_reference,
         language=language,
         out_param_location=out_param_location,
     )
 
+    # ── Step 12: generate project-wide appendix ──
     if sections.get("appendix", True):
         appendix_ext = get_format_extension(output_format)
         appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
