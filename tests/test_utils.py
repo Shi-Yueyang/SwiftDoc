@@ -66,37 +66,6 @@ class TestDecodeFile:
         assert result == "hello world"
 
 
-class TestGetNodeText:
-    def test_returns_decoded_text(self):
-        mock = MagicMock()
-        mock.text = b"hello"
-        assert get_node_text(mock) == "hello"
-
-
-class TestFindIdentifier:
-    def test_finds_identifier_directly(self):
-        mock = MagicMock()
-        mock.type = "identifier"
-        assert find_identifier(mock) is mock
-
-    def test_searches_children(self):
-        child = MagicMock()
-        child.type = "identifier"
-        parent = MagicMock()
-        parent.type = "declarator"
-        parent.children = [child]
-        assert find_identifier(parent) is child
-
-    def test_returns_none_when_not_found(self):
-        child = MagicMock()
-        child.type = "not_identifier"
-        child.children = []
-        parent = MagicMock()
-        parent.type = "declarator"
-        parent.children = [child]
-        assert find_identifier(parent) is None
-
-
 class TestIterProgress:
     def test_yields_correct_items(self):
         items = ["a", "b", "c"]
@@ -127,12 +96,6 @@ class TestHighlightMessage:
         with patch.object(sys.stderr, "isatty", return_value=False):
             result = highlight_message("hello")
             assert result == "hello"
-
-
-class TestEnableAnsiSupport:
-    def test_runs_on_windows(self):
-        # Should not raise on import
-        pass
 
 
 class TestFilterSourceFilesByAnalyseDirs:

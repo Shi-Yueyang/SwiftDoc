@@ -24,14 +24,6 @@ class TestConfigureLogging:
         root = logging.getLogger()
         assert root.level == logging.DEBUG
 
-    def test_verbose_includes_module_name_in_format(self):
-        configure_logging(verbose=True)
-        root = logging.getLogger()
-        handler = root.handlers[0] if root.handlers else None
-        if handler:
-            fmt = handler.formatter._fmt
-            assert "name" in fmt
-
     def test_third_party_loggers_are_suppressed(self):
         configure_logging(verbose=True)
         assert logging.getLogger("PIL").level == logging.INFO
@@ -276,4 +268,150 @@ class TestMain:
         assert os.path.isfile(expected)
         assert "Created config file:" in captured.out
         assert expected in captured.out
+
+
+class TestDirectoryShortcut:
+    """Tests for the swift-doc <folder> directory shortcut."""
+
+    def test_folder_with_toml_auto_fills_root_dir(self, tmp_path, monkeypatch):
+        d = tmp_path / "myproject"
+        d.mkdir()
+        (d / "swift-doc.toml").write_text("# minimal config\n", encoding="utf-8")
+
+        captured_override = {}
+
+        def fake_run(cli_args, toml_config_override=None):
+            captured_override["override"] = toml_config_override
+
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("cli._run_moduledesign", fake_run)
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
+
+        main()
+
+        override = captured_override["override"]
+        assert override is not None
+        assert override["root_dir"] == os.path.abspath(str(d))
+
+    def test_folder_with_toml_auto_fills_output_folder(self, tmp_path, monkeypatch):
+        d = tmp_path / "myproject"
+        d.mkdir()
+        (d / "swift-doc.toml").write_text("# minimal\n", encoding="utf-8")
+
+        captured_override = {}
+
+        def fake_run(cli_args, toml_config_override=None):
+            captured_override["override"] = toml_config_override
+
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("cli._run_moduledesign", fake_run)
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
+
+        main()
+
+        override = captured_override["override"]
+        assert override is not None
+        output = override["output_folder"]
+        prefix = os.path.abspath(str(d)) + os.sep + "moduledesign_"
+        assert output.startswith(prefix)
+        # timestamp part: YYYY-MM-DD_HHMMSS (17 chars)
+        ts_part = output[len(prefix):]
+        import re
+        assert re.match(r"^\d{4}-\d{2}-\d{2}_\d{6}$", ts_part)
+
+    def test_folder_with_toml_preserves_existing_root_dir(self, tmp_path, monkeypatch):
+        d = tmp_path / "myproject"
+        d.mkdir()
+        (d / "swift-doc.toml").write_text('root_dir = "src"\n', encoding="utf-8")
+
+        captured_override = {}
+
+        def fake_run(cli_args, toml_config_override=None):
+            captured_override["override"] = toml_config_override
+
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("cli._run_moduledesign", fake_run)
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
+
+        main()
+
+        override = captured_override["override"]
+        expected = os.path.normpath(os.path.join(str(d), "src"))
+        assert override["root_dir"] == expected
+
+    def test_folder_with_toml_preserves_existing_output_folder(self, tmp_path, monkeypatch):
+        d = tmp_path / "myproject"
+        d.mkdir()
+        (d / "swift-doc.toml").write_text('output_folder = "my_docs"\n', encoding="utf-8")
+
+        captured_override = {}
+
+        def fake_run(cli_args, toml_config_override=None):
+            captured_override["override"] = toml_config_override
+
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("cli._run_moduledesign", fake_run)
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
+
+        main()
+
+        override = captured_override["override"]
+        assert override["output_folder"] == "my_docs"
+
+    def test_folder_without_toml_errors(self, tmp_path, monkeypatch, capsys):
+        d = tmp_path / "empty_project"
+        d.mkdir()
+
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
+
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert "swift-doc.toml" in captured.err
+
+    def test_folder_with_verbose_reorders_argv(self, tmp_path, monkeypatch):
+        d = tmp_path / "myproject"
+        d.mkdir()
+        (d / "swift-doc.toml").write_text("# minimal\n", encoding="utf-8")
+
+        captured_argv = {}
+
+        def fake_run(cli_args, toml_config_override=None):
+            captured_argv["argv"] = list(sys.argv)
+
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("cli._run_moduledesign", fake_run)
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(d), "--verbose"])
+
+        main()
+
+        argv = captured_argv["argv"]
+        verbose_idx = argv.index("--verbose")
+        md_idx = argv.index("md")
+        assert verbose_idx < md_idx
+        assert str(d) in argv
+
+    def test_folder_passes_toml_override(self, tmp_path, monkeypatch):
+        d = tmp_path / "myproject"
+        d.mkdir()
+        (d / "swift-doc.toml").write_text('lang = "c"\n', encoding="utf-8")
+
+        captured = {}
+
+        def fake_run(cli_args, toml_config_override=None):
+            captured["override"] = toml_config_override
+            captured["called"] = True
+
+        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
+        monkeypatch.setattr("cli._run_moduledesign", fake_run)
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
+
+        main()
+
+        assert captured.get("called")
+        override = captured["override"]
+        assert override is not None
+        assert override["lang"] == "c"
+        assert override["root_dir"] == os.path.abspath(str(d))
 

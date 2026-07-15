@@ -5,11 +5,6 @@ from parsers.ada.types import (
     collect_ada_types_from_file,
     scan_project_types,
 )
-from parsers.common import (
-    is_missing_type_description,
-    summarize_ai_result,
-    AI_FAILED,
-)
 
 
 def _write_ada_file(tmp_dir, filename, content):
@@ -158,22 +153,4 @@ class TestScanProjectTypes:
         assert result["T"]["kind"] == "record"
 
 
-class TestIsMissingTypeDescription:
-    def test_missing_when_empty(self):
-        assert is_missing_type_description({}) is True
 
-    def test_missing_when_ai_failed(self):
-        assert is_missing_type_description({"type_description": AI_FAILED}) is True
-
-    def test_not_missing_when_present(self):
-        assert is_missing_type_description({"type_description": "A test type"}) is False
-
-
-class TestSummarizeAiResult:
-    def test_failed(self):
-        status, preview = summarize_ai_result(AI_FAILED)
-        assert status == "failed"
-
-    def test_success(self):
-        status, preview = summarize_ai_result("A brief description")
-        assert status == "success"

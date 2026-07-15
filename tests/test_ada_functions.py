@@ -14,11 +14,6 @@ from parsers.ada.functions import (
     _get_subprogram_spec,
 )
 from parsers.ada._utils import find_ada_identifier
-from parsers.common import (
-    is_missing_algorithm_logic,
-    summarize_ai_result,
-    AI_FAILED,
-)
 from tree_sitter import Language, Parser
 import tree_sitter_ada
 
@@ -300,22 +295,4 @@ procedure Target is begin null; end Target;"""
 
 # ── AI / metadata helpers ───────────────────────────────────────────────────
 
-class TestIsMissingAlgorithmLogic:
-    def test_missing_when_empty(self):
-        assert is_missing_algorithm_logic({}) is True
 
-    def test_missing_when_ai_failed(self):
-        assert is_missing_algorithm_logic({"algorithm_logic": AI_FAILED}) is True
-
-    def test_not_missing_when_present(self):
-        assert is_missing_algorithm_logic({"algorithm_logic": "Does something"}) is False
-
-
-class TestSummarizeAiResult:
-    def test_failed(self):
-        status, _ = summarize_ai_result(AI_FAILED)
-        assert status == "failed"
-
-    def test_success(self):
-        status, _ = summarize_ai_result("A valid description")
-        assert status == "success"

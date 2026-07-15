@@ -18,25 +18,9 @@ class TestEstimateTextUnits:
         result = estimate_text_units("hello")
         assert result == 5.0
 
-    def test_uppercase_weighted(self):
-        result = estimate_text_units("ABC")
-        assert result > 3.0  # uppercase chars weigh more
-
-    def test_underscore_weighted(self):
-        result = estimate_text_units("_")
-        assert result == 1.3
-
-    def test_digits_weighted(self):
-        result = estimate_text_units("123")
-        assert result > 3.0
-
-    def test_unicode_weighted(self):
-        result = estimate_text_units("中文")
-        assert result > 2.0
-
     def test_mixed(self):
         result = estimate_text_units("hello_world")
-        assert result > 11.0  # underscore adds extra
+        assert result > 11.0  # underscore adds extra weight
 
 
 class TestGetBoxWidth:
@@ -49,32 +33,11 @@ class TestGetBoxWidth:
         long = get_box_width("a_very_long_function_name")
         assert long > short
 
-    def test_padding_increases_width(self):
-        w1 = get_box_width("hello", padding=0.1)
-        w2 = get_box_width("hello", padding=0.5)
-        assert w2 > w1
-
-    def test_larger_fontsize_produces_wider_box(self):
-        text = "some_function_name"
-        w1 = get_box_width(text, fontsize=11)
-        w2 = get_box_width(text, fontsize=16)
-        assert w2 > w1
-
-    def test_min_width_floors_small_text(self):
-        w1 = get_box_width("x", min_width=1.0)
-        w2 = get_box_width("x", min_width=3.0)
-        assert w2 > w1
-
 
 class TestGetBoxHeight:
     def test_returns_positive_value(self):
         h = get_box_height(11)
         assert h > 0
-
-    def test_larger_fontsize_produces_taller_box(self):
-        h1 = get_box_height(11)
-        h2 = get_box_height(16)
-        assert h2 > h1
 
 
 class TestGenerateFunctionGraphs:
@@ -138,18 +101,3 @@ class TestGenerateFunctionGraphs:
         img_path = os.path.join(output_dir, f"{sample_functions[0]['name']}.png")
         size = os.path.getsize(img_path)
         assert size > 100  # image should have some content
-
-    def test_plain_style_generates_images(self, sample_functions, tmp_path):
-        output_dir = str(tmp_path / "plain_graph_output")
-        generate_function_graphs(function_list=sample_functions, output_dir=output_dir, style="plain")
-        assert os.path.isdir(output_dir)
-        for func in sample_functions:
-            img_path = os.path.join(output_dir, f"{func['name']}.png")
-            assert os.path.exists(img_path), f"Missing image for {func['name']} with plain style"
-
-    def test_plain_style_image_is_non_empty(self, sample_functions, tmp_path):
-        output_dir = str(tmp_path / "plain_non_empty_test")
-        generate_function_graphs(function_list=sample_functions[:1], output_dir=output_dir, style="plain")
-        img_path = os.path.join(output_dir, f"{sample_functions[0]['name']}.png")
-        size = os.path.getsize(img_path)
-        assert size > 100

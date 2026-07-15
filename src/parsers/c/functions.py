@@ -661,7 +661,6 @@ def _augment_functions_from_raw_source(raw_code, functions):
     return functions
 
 
-# 分析c文件
 def scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=None, defines=None):
     """Scan .c files and return a list of function dicts (no cache I/O)."""
     c_files = collect_source_files(project_dir, (".c",))
@@ -692,7 +691,3 @@ def scan_all_functions(project_dir, types_data, global_vars, analyse_dirs=None, 
         func["called_by"] = called_by_map.get(func["name"], [])
 
     return all_functions
-
-    return output_json_path
-
-

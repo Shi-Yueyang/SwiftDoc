@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import sys
+import time
 from config.manager import (
     ensure_ai_config_interactive,
     rerun_ai_config_interactive,
@@ -483,6 +484,50 @@ def main():
         _run_moduledesign(cli_args, toml_config_override=toml_config)
         return
 
+    # -- directory shortcut: swift-doc <project-folder> [flags] --
+    # Detects a bare directory, loads swift-doc.toml from inside it,
+    # auto-fills missing root_dir / output_folder, and injects the
+    # "md" subcommand into argv so argparse handles the rest.
+    _PARENT_FLAGS = frozenset({"--verbose", "-v", "--version"})
+    directory_override = None
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-") and os.path.isdir(sys.argv[1]):
+        config_path = find_config(sys.argv[1])
+        if config_path is None:
+            print(
+                f"Error: no {DEFAULT_CONFIG_NAME} found in {os.path.abspath(sys.argv[1])}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        toml_config = load_toml(config_path)
+        doc_type = toml_config.get("type", "moduledesign")
+        if doc_type != "moduledesign":
+            print(f"Error: unknown document type '{doc_type}' in {config_path}", file=sys.stderr)
+            sys.exit(1)
+        # resolve root_dir relative to the config file (supports drag-and-drop)
+        _rd = toml_config.get("root_dir")
+        if _rd and not os.path.isabs(_rd):
+            toml_config["root_dir"] = os.path.normpath(
+                os.path.join(os.path.dirname(config_path), _rd))
+        # auto-fill root_dir if still missing
+        if toml_config.get("root_dir") is None:
+            toml_config["root_dir"] = os.path.abspath(sys.argv[1])
+        # auto-fill output_folder if missing
+        if toml_config.get("output_folder") is None:
+            ts = time.strftime("%Y-%m-%d_%H%M%S")
+            toml_config["output_folder"] = os.path.join(
+                toml_config["root_dir"], f"{doc_type}_{ts}")
+        # reorder argv: parent-level flags before the injected subcommand
+        _script = sys.argv[0]
+        _parent = []
+        _rest = []
+        for arg in sys.argv[1:]:
+            if arg in _PARENT_FLAGS:
+                _parent.append(arg)
+            else:
+                _rest.append(arg)
+        sys.argv = [_script] + _parent + ["md"] + _rest
+        directory_override = toml_config
+
     parser = build_parser(default_cache_dir)
     cli_args = parser.parse_args(sys.argv[1:])
 
@@ -534,7 +579,7 @@ def main():
         return
 
     if cli_args.command == "moduledesign":
-        _run_moduledesign(cli_args)
+        _run_moduledesign(cli_args, toml_config_override=directory_override)
         return
 
     # -- no subcommand given --

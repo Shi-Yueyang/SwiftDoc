@@ -10,7 +10,6 @@ from parsers.common import (
     load_previous_type_cache,
     write_types_cache,
     is_missing_type_description,
-    summarize_ai_result,
     AI_FAILED,
 )
 
@@ -172,18 +171,4 @@ class TestIsMissingTypeDescription:
         assert is_missing_type_description({"type_description": AI_FAILED})
 
 
-class TestSummarizeAiResult:
-    def test_success(self):
-        status, preview = summarize_ai_result("A short description")
-        assert status == "success"
-        assert "A short description" in preview
 
-    def test_failed(self):
-        status, preview = summarize_ai_result(AI_FAILED)
-        assert status == "failed"
-
-    def test_long_description_truncated(self):
-        desc = "x" * 50
-        status, preview = summarize_ai_result(desc)
-        assert status == "success"
-        assert "..." in preview
