@@ -1,2 +1,2 @@
 # Edit this manually before each build to bump the version.
-VERSION = "0.1.3"
+VERSION = "0.2.0"

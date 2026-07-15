@@ -151,8 +151,8 @@ def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level,
     if global_types:
         for typ, ref in global_types.items():
             row = table.add_row()
-            _set_cell_text(row.cells[0], base_type)
             base_type = _extract_base_type_name(typ)
+            _set_cell_text(row.cells[0], base_type)
             ref_code = type_refs.get(base_type, ref)
             _set_cell_text(row.cells[1], ref_code)
             desc = type_desc_map.get(base_type, "") or "N/A"

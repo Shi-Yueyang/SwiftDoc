@@ -189,7 +189,7 @@ def build_parser(default_cache_dir):
 
     moduledesign_parser = subparsers.add_parser(
         "moduledesign",
-        aliases=["md", "generate"],
+        aliases=["md"],
         help="Extract project data and generate documentation",
         epilog=moduledesign_examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -380,6 +380,8 @@ def _run_moduledesign(cli_args, toml_config_override=None):
     cli_analyse = getattr(cli_args, "analyse_dir", None)
     toml_analyse = toml_config.get("analyse_dirs") if toml_config else None
     analyse_dirs = cli_analyse or toml_analyse or [root_dir]
+    # Resolve relative paths against root_dir (not CWD)
+    analyse_dirs = [d if os.path.isabs(d) else os.path.normpath(os.path.join(root_dir, d)) for d in analyse_dirs]
 
     cli_ignore_calls = getattr(cli_args, "ignore_calls", None)
     toml_ignore_calls = toml_config.get("ignore_calls") if toml_config else None
@@ -531,9 +533,10 @@ def main():
     parser = build_parser(default_cache_dir)
     cli_args = parser.parse_args(sys.argv[1:])
 
-    # Normalize alias
-    if cli_args.command in ("md", "generate"):
-        cli_args.command = "moduledesign"
+    # Normalize subcommand aliases so the rest of main() uses canonical names
+    _ALIASES = {"md": "moduledesign", "clear": "clear-cache"}
+    cli_args.command = _ALIASES.get(cli_args.command, cli_args.command)
+
     configure_logging(verbose=cli_args.verbose)
 
     if cli_args.command == "config-ai":
@@ -549,7 +552,7 @@ def main():
             rerun_ai_config_interactive()
         return
 
-    if cli_args.command in ("clear-cache", "clear"):
+    if cli_args.command == "clear-cache":
         cache_dir = getattr(cli_args, "cache_dir", None) or _read_last_cache_dir() or default_cache_dir
         if os.path.isdir(cache_dir):
             count = 0

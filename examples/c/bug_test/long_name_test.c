@@ -2,7 +2,7 @@
  * Regression test: long function names should wrap to multiple lines
  * instead of being truncated with "...".
  *
- * Run: swift-doc generate examples/c/bug_test/long_name_test.c --ai off
+ * Run: swift-doc md examples/c/bug_test/long_name_test.c --ai off
  */
 
 int global_counter;
