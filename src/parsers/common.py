@@ -245,17 +245,18 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
         if changed_functions:
             result_queue = Queue()
             _sentinel = object()
+            _total = len(changed_functions)
 
             def _writer():
                 while True:
                     item = result_queue.get()
                     if item is _sentinel:
                         break
-                    key, description = item
+                    key, description, done = item
                     status, preview = summarize_ai_result(description)
                     func = function_map.get(key)
                     name = func["name"] if func else str(key)
-                    logger.info("AI function: %s [%s] %s", name, status, preview)
+                    logger.info("AI function [%s/%s]: %s [%s] %s", done, _total, name, status, preview)
                     output_data["functions"] = list(function_map.values())
                     write_function_cache(output_json_path, output_data)
 
@@ -270,19 +271,27 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
                     current = function_map[key]
                     f = executor.submit(enrich_function_with_ai, current, type_descriptions, language)
                     futures[f] = key
-                for f in as_completed(futures):
-                    key = futures[f]
-                    try:
-                        description = f.result()
-                    except Exception:
-                        description = AI_FAILED
-                    if description != AI_FAILED:
-                        succeeded += 1
-                    result_queue.put((key, description))
+                done = 0
+                try:
+                    for f in as_completed(futures):
+                        key = futures[f]
+                        done += 1
+                        try:
+                            description = f.result()
+                        except Exception:
+                            description = AI_FAILED
+                        if description != AI_FAILED:
+                            succeeded += 1
+                        result_queue.put((key, description, done))
+                except KeyboardInterrupt:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    result_queue.put(_sentinel)
+                    logger.warning("AI functions: interrupted (%s/%s completed)", done, _total)
+                    raise
 
             result_queue.put(_sentinel)
             writer_thread.join()
-            logger.info("AI functions: %s/%s succeeded", succeeded, len(changed_functions))
+            logger.info("AI functions: %s/%s succeeded", succeeded, _total)
     elif should_persist:
         output_data["functions"] = list(function_map.values())
         write_function_cache(output_json_path, output_data)
@@ -363,15 +372,16 @@ def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", e
         if changed_names:
             result_queue = Queue()
             _sentinel = object()
+            _total = len(changed_names)
 
             def _writer():
                 while True:
                     item = result_queue.get()
                     if item is _sentinel:
                         break
-                    type_name, description = item
+                    type_name, description, done = item
                     status, preview = summarize_ai_result(description)
-                    logger.info("AI type: %s [%s] %s", type_name, status, preview)
+                    logger.info("AI type [%s/%s]: %s [%s] %s", done, _total, type_name, status, preview)
                     write_types_cache(cache_path, master_data)
 
             writer_thread = threading.Thread(target=_writer, daemon=True)
@@ -383,19 +393,27 @@ def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", e
                 for type_name in changed_names:
                     f = executor.submit(enrich_type_definition, type_name, master_types[type_name], language)
                     futures[f] = type_name
-                for f in as_completed(futures):
-                    type_name = futures[f]
-                    try:
-                        description = f.result()
-                    except Exception:
-                        description = AI_FAILED
-                    if description != AI_FAILED:
-                        succeeded += 1
-                    result_queue.put((type_name, description))
+                done = 0
+                try:
+                    for f in as_completed(futures):
+                        type_name = futures[f]
+                        done += 1
+                        try:
+                            description = f.result()
+                        except Exception:
+                            description = AI_FAILED
+                        if description != AI_FAILED:
+                            succeeded += 1
+                        result_queue.put((type_name, description, done))
+                except KeyboardInterrupt:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    result_queue.put(_sentinel)
+                    logger.warning("AI types: interrupted (%s/%s completed)", done, _total)
+                    raise
 
             result_queue.put(_sentinel)
             writer_thread.join()
-            logger.info("AI types: %s/%s succeeded", succeeded, len(changed_names))
+            logger.info("AI types: %s/%s succeeded", succeeded, _total)
     elif should_persist:
         write_types_cache(cache_path, master_data)
 
