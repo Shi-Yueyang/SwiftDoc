@@ -27,6 +27,7 @@ class BaseParser(ABC):
         enable_ai: bool = True,
         analyse_dirs: list[str] | None = None,
         defines: set | None = None,
+        ai_workers: int = 6,
     ) -> list[FuncDef]:
         """Parse source files, refresh cache, and return function dicts."""
         ...
@@ -37,6 +38,7 @@ class BaseParser(ABC):
 
     def extract_types(
         self, project_dir: str, cache_dir: str, enable_ai: bool = True,
+        ai_workers: int = 6,
     ) -> TypesData:
         """Extract, refresh, persist, and return type metadata for *project_dir*."""
         return {"description": "", "type_definitions": {}, "type_references": {}}

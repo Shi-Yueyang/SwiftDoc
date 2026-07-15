@@ -45,6 +45,7 @@ root_dir = "."
 
 # --- Extraction options ---
 # ai = "off"                 # "off" | "on"
+# ai_workers = 6             # number of parallel AI workers for enrichment
 # cache_dir = ".analysis"    # override the platform default cache dir
 # analyse_dirs = []          # scope docs to specific subdirectories (repeatable)
 # Example:

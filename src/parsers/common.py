@@ -7,10 +7,12 @@ identical cache management and AI orchestration code.
 import os
 import re
 import json
-import time
 import logging
 import tempfile
 import copy
+import threading
+from queue import Queue
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.ai import ai_prompt_for_function, ai_prompt_for_type, call_ai_from_config, AI_FAILED
 from core.compare import compare_functions, compare_types
@@ -174,7 +176,8 @@ def is_missing_type_description(type_definition):
 
 # ── refresh orchestrators ───────────────────────────────────────────────────
 
-def refresh_functions(all_functions, output_json_path, types_data, enable_ai=True, language="c"):
+def refresh_functions(all_functions, output_json_path, types_data, enable_ai=True, language="c",
+                      ai_workers=6):
     """Compare fresh functions against cache, apply AI enrichment for changes."""
     type_descriptions = {
         name: info["type_description"]
@@ -239,14 +242,47 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
             logger.info(highlight_message("Refreshing AI descriptions for %s changed functions"), len(changed_functions))
         else:
             logger.info(highlight_message("No functions require AI refresh"))
-        for idx, func in enumerate(changed_functions, start=1):
-            current = function_map[_func_key(func)]
-            description = enrich_function_with_ai(current, type_descriptions, language=language)
-            status, preview = summarize_ai_result(description)
-            logger.info("AI progress %s/%s: %s [%s] %s", idx, len(changed_functions), current["name"], status, preview)
-            output_data["functions"] = list(function_map.values())
-            write_function_cache(output_json_path, output_data)
-            time.sleep(0.5)
+        if changed_functions:
+            result_queue = Queue()
+            _sentinel = object()
+
+            def _writer():
+                while True:
+                    item = result_queue.get()
+                    if item is _sentinel:
+                        break
+                    key, description = item
+                    status, preview = summarize_ai_result(description)
+                    func = function_map.get(key)
+                    name = func["name"] if func else str(key)
+                    logger.info("AI function: %s [%s] %s", name, status, preview)
+                    output_data["functions"] = list(function_map.values())
+                    write_function_cache(output_json_path, output_data)
+
+            writer_thread = threading.Thread(target=_writer, daemon=True)
+            writer_thread.start()
+
+            succeeded = 0
+            with ThreadPoolExecutor(max_workers=ai_workers) as executor:
+                futures = {}
+                for func in changed_functions:
+                    key = _func_key(func)
+                    current = function_map[key]
+                    f = executor.submit(enrich_function_with_ai, current, type_descriptions, language)
+                    futures[f] = key
+                for f in as_completed(futures):
+                    key = futures[f]
+                    try:
+                        description = f.result()
+                    except Exception:
+                        description = AI_FAILED
+                    if description != AI_FAILED:
+                        succeeded += 1
+                    result_queue.put((key, description))
+
+            result_queue.put(_sentinel)
+            writer_thread.join()
+            logger.info("AI functions: %s/%s succeeded", succeeded, len(changed_functions))
     elif should_persist:
         output_data["functions"] = list(function_map.values())
         write_function_cache(output_json_path, output_data)
@@ -265,7 +301,7 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
 
 
 def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", enable_ai=True,
-                            language="c"):
+                            language="c", ai_workers=6):
     """Compare fresh types against cache, apply AI enrichment for changes."""
     folder_name = build_cache_name(project_dir)
     cache_path = os.path.join(output_dir, f"{folder_name}_global_types.json")
@@ -324,12 +360,42 @@ def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", e
             logger.info(highlight_message("Refreshing AI descriptions for %s changed types"), len(changed_names))
         else:
             logger.info(highlight_message("No types require AI refresh"))
-        for idx, type_name in enumerate(changed_names, start=1):
-            description = enrich_type_definition(type_name, master_types[type_name], language=language)
-            status, preview = summarize_ai_result(description)
-            logger.info("AI progress %s/%s: %s [%s] %s", idx, len(changed_names), type_name, status, preview)
-            write_types_cache(cache_path, master_data)
-            time.sleep(0.15)
+        if changed_names:
+            result_queue = Queue()
+            _sentinel = object()
+
+            def _writer():
+                while True:
+                    item = result_queue.get()
+                    if item is _sentinel:
+                        break
+                    type_name, description = item
+                    status, preview = summarize_ai_result(description)
+                    logger.info("AI type: %s [%s] %s", type_name, status, preview)
+                    write_types_cache(cache_path, master_data)
+
+            writer_thread = threading.Thread(target=_writer, daemon=True)
+            writer_thread.start()
+
+            succeeded = 0
+            with ThreadPoolExecutor(max_workers=ai_workers) as executor:
+                futures = {}
+                for type_name in changed_names:
+                    f = executor.submit(enrich_type_definition, type_name, master_types[type_name], language)
+                    futures[f] = type_name
+                for f in as_completed(futures):
+                    type_name = futures[f]
+                    try:
+                        description = f.result()
+                    except Exception:
+                        description = AI_FAILED
+                    if description != AI_FAILED:
+                        succeeded += 1
+                    result_queue.put((type_name, description))
+
+            result_queue.put(_sentinel)
+            writer_thread.join()
+            logger.info("AI types: %s/%s succeeded", succeeded, len(changed_names))
     elif should_persist:
         write_types_cache(cache_path, master_data)
 

@@ -287,6 +287,12 @@ def build_parser(default_cache_dir):
         default=argparse.SUPPRESS,
         help="Comma-separated section keys to skip: module_description,inputs,outputs,global_data,local_data,algorithm,interface,appendix",
     )
+    moduledesign_parser.add_argument(
+        "--ai-workers",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Number of parallel AI workers for function/type enrichment (default: 6)",
+    )
 
     config_examples = """Examples:
     swift-doc config-ai
@@ -374,6 +380,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
     group_by = _resolve("group_by", cli_args, toml_config, _DEFAULTS["group_by"])
     style = _resolve("style", cli_args, toml_config, _DEFAULTS["style"])
     ai = _resolve("ai", cli_args, toml_config, _DEFAULTS["ai"])
+    ai_workers = int(_resolve("ai_workers", cli_args, toml_config, 6))
     embedded_global_reference = _resolve("embedded_global_reference", cli_args, toml_config, "no")
     out_param_location = _resolve("out_param_location", cli_args, toml_config, _DEFAULTS["out_param_location"])
 
@@ -430,6 +437,7 @@ def _run_moduledesign(cli_args, toml_config_override=None):
         root_dir=root_dir,
         cache_dir=cache_dir,
         ai=ai,
+        ai_workers=ai_workers,
         language=lang,
         analyse_dirs=analyse_dirs,
         defines=defines,

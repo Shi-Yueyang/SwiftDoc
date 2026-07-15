@@ -62,6 +62,7 @@ def run_extract_phase(args):
 
     os.makedirs(args.cache_dir, exist_ok=True)
     enable_ai = getattr(args, "ai", "on") == "on"
+    ai_workers = getattr(args, "ai_workers", 6)
 
     project_root = os.path.normpath(args.root_dir)
     analysis_paths = build_analysis_paths(args.cache_dir, project_root)
@@ -79,6 +80,7 @@ def run_extract_phase(args):
         project_root,
         args.cache_dir,
         enable_ai=enable_ai,
+        ai_workers=ai_workers,
     )
     # --- Functions ---
     parser.extract_functions(
@@ -89,6 +91,7 @@ def run_extract_phase(args):
         enable_ai=enable_ai,
         analyse_dirs=analyse_dirs,
         defines=defines,
+        ai_workers=ai_workers,
     )
 
     logger.info(colorize_extract_phase_message("Analysis completed.", EXTRACT_PHASE_DONE_COLOR))

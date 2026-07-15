@@ -17,11 +17,12 @@ class AdaParser(BaseParser):
 
     def extract_types(
         self, project_dir: str, cache_dir: str, enable_ai: bool = True,
+        ai_workers: int = 6,
     ) -> TypesData:
         fresh_types = scan_project_types(project_dir)
         return refresh_type_definitions(
             fresh_types, project_dir, cache_dir, enable_ai=enable_ai,
-            language=self.language,
+            language=self.language, ai_workers=ai_workers,
         )
 
     def extract_functions(
@@ -33,6 +34,7 @@ class AdaParser(BaseParser):
         enable_ai: bool = True,
         analyse_dirs: list[str] | None = None,
         defines: set | None = None,
+        ai_workers: int = 6,
     ) -> list[FuncDef]:
         all_functions = scan_all_functions(project_dir, types_data, global_vars)
         refresh_functions(
@@ -41,5 +43,6 @@ class AdaParser(BaseParser):
             types_data=types_data,
             enable_ai=enable_ai,
             language=self.language,
+            ai_workers=ai_workers,
         )
         return all_functions
