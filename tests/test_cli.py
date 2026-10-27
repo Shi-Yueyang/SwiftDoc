@@ -104,11 +104,6 @@ class TestBuildParser:
         ns = p.parse_args(["moduledesign", "/proj", "--ai", "on"])
         assert ns.ai == "on"
 
-    def test_moduledesign_with_ada_lang(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--lang", "ada"])
-        assert ns.lang == "ada"
-
     def test_moduledesign_with_multiple_analyse_dirs(self):
         p = build_parser("/tmp/cache")
         ns = p.parse_args(["moduledesign", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])

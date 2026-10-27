@@ -1,6 +1,6 @@
 """Shared cache I/O, AI enrichment, and refresh logic for language parsers.
 
-Both C and Ada parsers import from here to avoid duplicating ~400 lines of
+Language parsers import from here to avoid duplicating ~400 lines of
 identical cache management and AI orchestration code.
 """
 
@@ -103,9 +103,9 @@ def prepare_function_metadata(func, type_descriptions=None):
             inp["type_description"] = (type_descriptions or {}).get(base_type, "")
 
 
-def enrich_function_with_ai(func, type_descriptions, language="c"):
+def enrich_function_with_ai(func, type_descriptions):
     prepare_function_metadata(func, type_descriptions)
-    prompt = ai_prompt_for_function(func, language=language)
+    prompt = ai_prompt_for_function(func)
     response = call_ai_from_config(prompt)
     if response != AI_FAILED:
         try:
@@ -156,8 +156,8 @@ def is_missing_algorithm_logic(func):
 
 # ── type AI ─────────────────────────────────────────────────────────────────
 
-def enrich_type_definition(type_name, type_definition, language="c"):
-    prompt = ai_prompt_for_type(type_name, type_definition, language=language)
+def enrich_type_definition(type_name, type_definition):
+    prompt = ai_prompt_for_type(type_name, type_definition)
     description = call_ai_from_config(prompt)
     type_definition["type_description"] = description
     if description == AI_FAILED:
@@ -176,7 +176,7 @@ def is_missing_type_description(type_definition):
 
 # ── refresh orchestrators ───────────────────────────────────────────────────
 
-def refresh_functions(all_functions, output_json_path, types_data, enable_ai=True, language="c",
+def refresh_functions(all_functions, output_json_path, types_data, enable_ai=True,
                       ai_workers=6):
     """Compare fresh functions against cache, apply AI enrichment for changes."""
     type_descriptions = {
@@ -269,7 +269,7 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
                 for func in changed_functions:
                     key = _func_key(func)
                     current = function_map[key]
-                    f = executor.submit(enrich_function_with_ai, current, type_descriptions, language)
+                    f = executor.submit(enrich_function_with_ai, current, type_descriptions)
                     futures[f] = key
                 done = 0
                 try:
@@ -310,7 +310,7 @@ def refresh_functions(all_functions, output_json_path, types_data, enable_ai=Tru
 
 
 def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", enable_ai=True,
-                            language="c", ai_workers=6):
+                            ai_workers=6):
     """Compare fresh types against cache, apply AI enrichment for changes."""
     folder_name = build_cache_name(project_dir)
     cache_path = os.path.join(output_dir, f"{folder_name}_global_types.json")
@@ -391,7 +391,7 @@ def refresh_type_definitions(fresh_types, project_dir, output_dir=".analysis", e
             with ThreadPoolExecutor(max_workers=ai_workers) as executor:
                 futures = {}
                 for type_name in changed_names:
-                    f = executor.submit(enrich_type_definition, type_name, master_types[type_name], language)
+                    f = executor.submit(enrich_type_definition, type_name, master_types[type_name])
                     futures[f] = type_name
                 done = 0
                 try:

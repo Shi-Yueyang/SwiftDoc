@@ -12,18 +12,11 @@ class TestDetectLanguage:
         ([("main.c", "int main() {}"), ("utils.c", "void foo() {}")], False, "c"),
         ([("types.h", "typedef int foo;"), ("config.h", "#define BAR 1")], False, "c"),
         ([("main.c", "int main() {}")], True, "c"),
-        # pure Ada
-        ([("main.adb", "procedure Main is begin null; end Main;")], False, "ada"),
-        ([("types.ads", "package Types is end Types;")], False, "ada"),
-        ([("main.adb", "procedure Main is begin null; end Main;")], True, "ada"),
-        # majority wins
-        ([("a.c", ""), ("b.c", ""), ("c.c", ""), ("d.adb", "")], False, "c"),
-        ([("a.c", ""), ("b.adb", ""), ("c.adb", ""), ("d.adb", "")], False, "ada"),
-        ([("main.adb", ""), ("types.ads", ""), ("legacy.c", ""), ("legacy.h", "")], False, "ada"),
-        # tie goes to ada
-        ([("a.c", ""), ("b.c", ""), ("x.adb", ""), ("y.adb", "")], False, "ada"),
+        # unknown extensions don't count, still falls back to c
+        ([("a.c", ""), ("b.c", ""), ("c.c", ""), ("d.txt", "")], False, "c"),
+        ([("readme.md", ""), ("Makefile", "")], False, "c"),
         # nested directories
-        ([("src/main.adb", ""), ("src/utils.ads", "")], False, "ada"),
+        ([("src/main.c", ""), ("src/utils.h", "")], False, "c"),
     ])
     def test_detect_language(self, tmp_path, files, use_file_root, expected):
         for path, content in files:

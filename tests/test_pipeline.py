@@ -301,7 +301,7 @@ class TestIntegrationC:
         assert os.path.exists(os.path.join(out_dir, "main.md"))
         assert os.path.exists(os.path.join(out_dir, "appendix.md"))
 
-        # Verify appendix contains C syntax, not Ada
+        # Verify appendix contains C typedef syntax
         with open(os.path.join(out_dir, "appendix.md"), encoding="utf-8") as f:
             appendix = f.read()
         assert "typedef struct" in appendix or "typedef enum" in appendix or "typedef" in appendix
@@ -334,117 +334,6 @@ class TestIntegrationC:
         with open(os.path.join(out_dir, "main.md"), encoding="utf-8") as f:
             first_line = f.readline().strip()
         assert first_line == "# main.c"
-
-
-class TestIntegrationAda:
-    """End-to-end pipeline tests against the built-in Ada example project."""
-
-    @pytest.fixture
-    def ada_example_dir(self):
-        import pathlib
-        return str(pathlib.Path(__file__).resolve().parent.parent / "examples" / "ada")
-
-    def test_full_pipeline_generates_expected_output(self, ada_example_dir, tmp_path):
-        import argparse
-        cache_dir = str(tmp_path / "cache")
-        out_dir = str(tmp_path / "out")
-
-        # Extract phase
-        extract_args = argparse.Namespace(
-            root_dir=ada_example_dir, cache_dir=cache_dir, ai="off", language="ada",
-        )
-        run_extract_phase(extract_args)
-
-        # Verify cache files
-        paths = build_analysis_paths(cache_dir, ada_example_dir)
-        assert os.path.exists(paths["globals"])
-        assert os.path.exists(paths["types"])
-        assert os.path.exists(paths["functions"])
-
-        # Verify function cache
-        with open(paths["functions"], encoding="utf-8") as f:
-            funcs_data = json.load(f)
-        funcs = funcs_data["functions"]
-        func_names = {f["name"] for f in funcs}
-        assert "Main" in func_names
-        assert "Read_Sensor" in func_names
-        # Verify call graph is populated
-        main = next(f for f in funcs if f["name"] == "Main")
-        assert len(main["calls"]) > 0
-
-        # Verify type cache has Ada types
-        with open(paths["types"], encoding="utf-8") as f:
-            types_data = json.load(f)
-        type_defs = types_data["type_definitions"]
-        assert "Status" in type_defs
-        assert "Point" in type_defs
-
-        # Docgen phase
-        docgen_args = argparse.Namespace(
-            root_dir=ada_example_dir, analyse_dirs=[ada_example_dir],
-            cache_dir=cache_dir, output_folder=out_dir,
-            format="markdown", group_by="function",
-            language="ada",
-        )
-        run_docgen_phase(docgen_args)
-
-        # Verify markdown output
-        assert os.path.isdir(os.path.join(out_dir, "figures"))
-        assert os.path.exists(os.path.join(out_dir, "Main.md"))
-        assert os.path.exists(os.path.join(out_dir, "appendix.md"))
-
-        # Verify appendix has Ada syntax, not C
-        with open(os.path.join(out_dir, "appendix.md"), encoding="utf-8") as f:
-            appendix = f.read()
-        assert "end record" in appendix or "type" in appendix
-        assert "typedef struct" not in appendix
-
-    def test_per_file_grouping_uses_adb_extension(self, ada_example_dir, tmp_path):
-        import argparse
-        cache_dir = str(tmp_path / "cache")
-        out_dir = str(tmp_path / "out")
-
-        extract_args = argparse.Namespace(
-            root_dir=ada_example_dir, cache_dir=cache_dir, ai="off", language="ada",
-        )
-        run_extract_phase(extract_args)
-
-        docgen_args = argparse.Namespace(
-            root_dir=ada_example_dir, analyse_dirs=[ada_example_dir],
-            cache_dir=cache_dir, output_folder=out_dir,
-            format="markdown", group_by="file",
-            language="ada",
-        )
-        run_docgen_phase(docgen_args)
-
-        # Heading should use .adb not .c
-        assert os.path.exists(os.path.join(out_dir, "main.md"))
-        with open(os.path.join(out_dir, "main.md"), encoding="utf-8") as f:
-            first_line = f.readline().strip()
-        assert first_line == "# main.adb"
-
-    def test_direction_modes_in_output(self, ada_example_dir, tmp_path):
-        import argparse
-        cache_dir = str(tmp_path / "cache")
-        out_dir = str(tmp_path / "out")
-
-        extract_args = argparse.Namespace(
-            root_dir=ada_example_dir, cache_dir=cache_dir, ai="off", language="ada",
-        )
-        run_extract_phase(extract_args)
-
-        docgen_args = argparse.Namespace(
-            root_dir=ada_example_dir, analyse_dirs=[ada_example_dir],
-            cache_dir=cache_dir, output_folder=out_dir,
-            format="markdown", group_by="function",
-            language="ada",
-        )
-        run_docgen_phase(docgen_args)
-
-        # Init_Spi has an 'out' parameter and a global var
-        with open(os.path.join(out_dir, "Init_Spi.md"), encoding="utf-8") as f:
-            md = f.read()
-        assert "out" in md  # direction mode
 
 
 class TestRunDocgenPhaseMissingFunctions:

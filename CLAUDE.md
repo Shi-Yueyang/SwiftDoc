@@ -13,7 +13,7 @@ See [README.md](README.md) for build, test, and CLI commands.
 1. **Extract phase** (`run_extract_phase`): Walks the source tree, parses source files with tree-sitter, extracts globals/types/functions, optionally enriches with AI descriptions, and writes JSON caches to the cache dir. Cache stores COMPLETE data — no filtering here.
 2. **Docgen phase** (`run_docgen_phase`): Reads cached JSON, filters functions by `--analyse_dir`, applies `--ignore-calls`/`--ignore-types` filtering at docgen time (cache stays untainted), generates docs and call-graph PNGs.
 
-**Parser plugin system** (`parsers/`): `BaseParser` is the ABC with `extract_functions()`, `extract_globals()`, and `extract_types()`. `CParser` and `AdaParser` are the implementations. New languages are registered via `parsers/__init__.py` → `register_parser()`.
+**Parser plugin system** (`parsers/`): `BaseParser` is the ABC with `extract_functions()`, `extract_globals()`, and `extract_types()`. `CParser` is the current implementation. New languages are registered via `parsers/__init__.py` → `register_parser()`.
 
 **Generator plugin system** (`generators/`): Supports `markdown` and `docx` formats (default: `docx`). Modules must export `generate_functions()` and `generate_appendix()`. Registered in `generators/__init__.py`.
 
@@ -70,7 +70,7 @@ CLI uses `argparse.SUPPRESS` for all moduledesign-command arguments so we can di
 
 - `--ignore-calls` / `[ignore] calls` — filters function names from `calls` lists (not `called_by`). Applied at **docgen time** — cache stores complete data.
 - `--ignore-types` / `[ignore] types` — strips type names from `type_refs` and clears `type_ref` on global-variable inputs. Applied at **docgen time**.
-- `--ignore-kinds` / `[ignore] kinds` — drops types whose `kind` field matches. C kinds: struct, union, enum, typedef. Ada kinds: record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type. Default: empty (no filtering). Applied at **docgen time**.
+- `--ignore-kinds` / `[ignore] kinds` — drops types whose `kind` field matches. C kinds: struct, union, enum, typedef. Default: empty (no filtering). Applied at **docgen time**.
 - Hardcoded baseline at extraction time: `_IGNORED_CALLS = {"memcpy", "memset"}` in `parsers/c/functions.py` — these are always filtered.
 
 ## Key Conventions

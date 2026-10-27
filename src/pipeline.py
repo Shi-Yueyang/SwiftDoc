@@ -215,7 +215,6 @@ def run_docgen_phase(args):
         sections = {k: True for k in _ALL_SECTION_KEYS}
 
     embedded_global_reference = getattr(args, "embedded_global_reference", "no") == "yes"
-    language = getattr(args, "language", "c")
     out_param_location = getattr(args, "out_param_location", "inputs")
 
     # ── Step 10: render call-graph images (skip for table style) ──
@@ -232,7 +231,6 @@ def run_docgen_phase(args):
         style=graph_style,
         sections=sections,
         embedded_global_reference=embedded_global_reference,
-        language=language,
         out_param_location=out_param_location,
     )
 
@@ -240,8 +238,6 @@ def run_docgen_phase(args):
     if sections.get("appendix", True):
         appendix_ext = get_format_extension(output_format)
         appendix_output = os.path.join(output_folder, f"appendix{appendix_ext}")
-        generator.generate_appendix(types_data, appendix_output,
-                                    filter_types=None,
-                                    language=getattr(args, "language", "c"))
+        generator.generate_appendix(types_data, appendix_output, filter_types=None)
 
     logger.info(colorize_extract_phase_message("It's done.", EXTRACT_PHASE_DONE_COLOR))

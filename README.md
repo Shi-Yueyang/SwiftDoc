@@ -11,9 +11,6 @@ pip install -e .
 
 # Run on the built-in C example
 swift-doc moduledesign examples/c --ai off
-
-# Run on the Ada example
-swift-doc moduledesign examples/ada --lang ada --ai off
 ```
 
 Output lands in `out/` by default — docs per file, call-graph PNGs in `out/figures/`, and a type appendix.
@@ -45,7 +42,7 @@ swift-doc moduledesign examples/c --ai on
 | Argument | Default | Description |
 |---|---|---|
 | `root_dir` | auto-discovered | Project root or path to a `.toml` config file |
-| `--lang` | `auto` | Source language (`c`, `ada`, or `auto`) |
+| `--lang` | `auto` | Source language (`c` or `auto`) |
 | `--analyse_dir` | root_dir | Subset to generate docs for (repeatable) |
 | `--cache_dir` | platform cache | Intermediate JSON directory |
 | `--output_folder` | `out` | Output directory for docs and figures |
@@ -53,7 +50,7 @@ swift-doc moduledesign examples/c --ai on
 | `--format` | `docx` | Output format (`markdown`, `docx`) |
 | `--group-by` | `file` | Group docs per `function` or per `file` |
 | `--style` | `plain` | Call-graph style (`plain` black/white, or `table` inline) |
-| `--ignore-kinds` | — | Type kinds to exclude: C: struct, union, enum, typedef; Ada: record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type (repeatable) |
+| `--ignore-kinds` | — | Type kinds to exclude: struct, union, enum, typedef (repeatable) |
 | `--ignore-calls` | — | Function names to exclude from call graphs (repeatable) |
 | `--ignore-types` | — | Type names to exclude from extraction (repeatable) |
 | `--verbose` | off | Enable debug logging |

@@ -80,7 +80,7 @@ def _create_document():
     return doc
 
 
-def generate_appendix_docx(types_data: dict, output_docx_path: str, filter_types: Optional[Set[str]] = None, language: str = "c") -> None:
+def generate_appendix_docx(types_data: dict, output_docx_path: str, filter_types: Optional[Set[str]] = None) -> None:
     data = types_data
     type_defs = data.get("type_definitions", {})
     type_refs = data.get("type_references", {})
@@ -96,7 +96,7 @@ def generate_appendix_docx(types_data: dict, output_docx_path: str, filter_types
         if filter_types is not None and type_name not in filter_types:
             continue
         info = type_defs[type_name]
-        definition = generate_definition(type_name, info, language=language)
+        definition = generate_definition(type_name, info)
         description = info.get("type_description", "").strip()
         if not description:
             description = "No description"
@@ -132,7 +132,7 @@ def generate_appendix_docx(types_data: dict, output_docx_path: str, filter_types
     logger.debug("Appendix saved to %s", output_docx_path)
 
 
-def _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language="c"):
+def _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type):
     """Append an embedded types appendix table to an existing docx document.
 
     Parameters
@@ -143,8 +143,6 @@ def _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language="
         Project-wide type definitions.
     embedded_ref_to_type : dict[str, str]
         Mapping from embedded ref code (e.g. "A_1") to type name.
-    language : str
-        "c" or "ada" -- controls definition syntax.
     """
     doc.add_heading("Appendix - Embedded Type References", level=2)
 
@@ -165,7 +163,7 @@ def _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language="
     for code in sorted(embedded_ref_to_type, key=sort_key):
         tname = embedded_ref_to_type[code]
         info = type_defs.get(tname, {})
-        definition = generate_definition(tname, info, language=language)
+        definition = generate_definition(tname, info)
         description = info.get("type_description", "").strip() or "No description"
         row = table.add_row()
         _set_cell_text(row.cells[0], code)

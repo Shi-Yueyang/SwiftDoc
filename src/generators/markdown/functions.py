@@ -161,7 +161,7 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
 
 
 def generate_function_md_per_function(function_list, types_json, figures_dir, output_dir,
-                                     style="plain", sections=None, embedded_global_reference=False, language="c",
+                                     style="plain", sections=None, embedded_global_reference=False,
                                      out_param_location="inputs"):
     """Generate one .md file per function."""
     type_defs, type_refs = load_types(types_json)
@@ -187,7 +187,7 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
         # -- embedded appendix --
         if embedded_global_reference and embedded_ref_to_type:
             from generators.markdown.appendix import generate_embedded_appendix_md
-            lines += generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language)
+            lines += generate_embedded_appendix_md(type_defs, embedded_ref_to_type)
 
         safe_name = fname.replace("\\", "_").replace("/", "_").replace(":", "_")
         with open(os.path.join(output_dir, f"{safe_name}.md"), "w", encoding="utf-8") as f:
@@ -195,7 +195,7 @@ def generate_function_md_per_function(function_list, types_json, figures_dir, ou
 
 
 def generate_function_md_by_file(function_list, types_json, figures_dir, output_dir,
-                                 style="plain", sections=None, embedded_global_reference=False, language="c",
+                                 style="plain", sections=None, embedded_global_reference=False,
                                  out_param_location="inputs"):
     """Generate one .md file per source file, grouping functions together."""
     type_defs, type_refs = load_types(types_json)
@@ -232,7 +232,7 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
         # -- embedded appendix --
         if embedded_global_reference and embedded_ref_to_type:
             from generators.markdown.appendix import generate_embedded_appendix_md
-            lines += generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language)
+            lines += generate_embedded_appendix_md(type_defs, embedded_ref_to_type)
 
         with open(os.path.join(output_dir, f"{safe_base}.md"), "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
@@ -240,14 +240,14 @@ def generate_function_md_by_file(function_list, types_json, figures_dir, output_
 
 def generate_function_md(function_list, types_json, figures_dir, output_dir="MD",
                          group_by="function", style="plain", sections=None,
-                         embedded_global_reference=False, language="c", out_param_location="inputs"):
+                         embedded_global_reference=False, out_param_location="inputs"):
     functions = function_list
 
     if group_by == "file":
         generate_function_md_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                     sections=sections, embedded_global_reference=embedded_global_reference, language=language,
+                                     sections=sections, embedded_global_reference=embedded_global_reference,
                                      out_param_location=out_param_location)
     else:
         generate_function_md_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                          sections=sections, embedded_global_reference=embedded_global_reference, language=language,
+                                          sections=sections, embedded_global_reference=embedded_global_reference,
                                           out_param_location=out_param_location)

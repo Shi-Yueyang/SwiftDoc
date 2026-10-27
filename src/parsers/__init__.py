@@ -16,13 +16,11 @@ import logging
 import os
 
 from parsers.c import CParser
-from parsers.ada import AdaParser
 
 logger = logging.getLogger(__name__)
 
 _PARSERS = {
     "c": CParser(),
-    "ada": AdaParser(),
 }
 
 

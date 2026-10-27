@@ -9,7 +9,7 @@ from generators.common import generate_definition
 logger = logging.getLogger(__name__)
 
 
-def generate_appendix_md(types_data: dict, output_md_path: str, filter_types: Optional[Set[str]] = None, language: str = "c") -> None:
+def generate_appendix_md(types_data: dict, output_md_path: str, filter_types: Optional[Set[str]] = None) -> None:
     data = types_data
     type_defs = data.get("type_definitions", {})
     type_refs = data.get("type_references", {})
@@ -25,7 +25,7 @@ def generate_appendix_md(types_data: dict, output_md_path: str, filter_types: Op
         if filter_types is not None and type_name not in filter_types:
             continue
         info = type_defs[type_name]
-        definition = generate_definition(type_name, info, language=language).replace("\n", "<br>")
+        definition = generate_definition(type_name, info).replace("\n", "<br>")
         description = info.get("type_description", "").strip()
         if not description:
             description = "No description"
@@ -58,7 +58,7 @@ def generate_appendix_md(types_data: dict, output_md_path: str, filter_types: Op
     logger.debug("Appendix saved to %s", output_md_path)
 
 
-def generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language="c"):
+def generate_embedded_appendix_md(type_defs, embedded_ref_to_type):
     """Return markdown lines for an embedded types appendix table.
 
     Parameters
@@ -67,8 +67,6 @@ def generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language="c")
         Project-wide type definitions (allows looking up kind/members/values).
     embedded_ref_to_type : dict[str, str]
         Mapping from embedded ref code (e.g. "A_1") to type name.
-    language : str
-        "c" or "ada" -- controls definition syntax.
 
     Returns
     -------
@@ -90,7 +88,7 @@ def generate_embedded_appendix_md(type_defs, embedded_ref_to_type, language="c")
     for code in sorted(embedded_ref_to_type, key=sort_key):
         tname = embedded_ref_to_type[code]
         info = type_defs.get(tname, {})
-        definition = generate_definition(tname, info, language=language).replace("\n", "<br>")
+        definition = generate_definition(tname, info).replace("\n", "<br>")
         description = info.get("type_description", "").strip() or "No description"
         definition_esc = definition.replace("|", "\\|")
         desc_esc = description.replace("|", "\\|")

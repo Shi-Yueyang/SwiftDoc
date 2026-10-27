@@ -35,7 +35,7 @@ type = "moduledesign"       # document type: "moduledesign"
 root_dir = "."
 
 # --- Output options ---
-# lang = "auto"              # "auto" | "c" | "ada"
+# lang = "auto"              # "auto" | "c"
 # output_folder = "out"      # where generated docs land
 # format = "docx"            # "docx" | "markdown"
 # group_by = "file"          # "file" | "function"
@@ -61,7 +61,7 @@ root_dir = "."
 [ignore]
 calls = []                   # function names to exclude from call graphs
 types = []                   # type names to skip during extraction
-kinds = []                   # type kinds to skip: C: struct, union, enum, typedef; Ada: record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type
+kinds = []                   # type kinds to skip: struct, union, enum, typedef
 
 # --- Preprocessor defines ---
 # Example:

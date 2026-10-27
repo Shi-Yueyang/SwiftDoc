@@ -22,7 +22,7 @@ class CParser(BaseParser):
         fresh_types = scan_project_types(project_dir)
         return refresh_type_definitions(
             fresh_types, project_dir, cache_dir, enable_ai=enable_ai,
-            language=self.language, ai_workers=ai_workers,
+            ai_workers=ai_workers,
         )
 
     def extract_functions(
@@ -42,7 +42,6 @@ class CParser(BaseParser):
             output_json_path=output_json_path,
             types_data=types_data,
             enable_ai=enable_ai,
-            language=self.language,
             ai_workers=ai_workers,
         )
         return all_functions

@@ -261,7 +261,7 @@ def build_parser(default_cache_dir):
         "--ignore-kinds",
         action="append",
         default=argparse.SUPPRESS,
-        help="Type kinds to exclude: struct, union, enum, typedef (C); record, enumeration, access, array, derived, subtype, modular, fixed_point, decimal_fixed_point, float, interface, private, type (Ada) (repeatable)",
+        help="Type kinds to exclude: struct, union, enum, typedef (repeatable)",
     )
     moduledesign_parser.add_argument(
         "--define",
@@ -452,7 +452,6 @@ def _run_moduledesign(cli_args, toml_config_override=None):
         format=fmt,
         group_by=group_by,
         style=style,
-        language=lang,
         ignore_calls=ignore_calls,
         ignore_types=ignore_types,
         ignore_kinds=ignore_kinds,

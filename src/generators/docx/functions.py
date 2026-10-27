@@ -278,7 +278,7 @@ def _sanitize_filename(name):
 
 
 def generate_function_docx_per_function(function_list, types_json, figures_dir, output_dir,
-                                        style="plain", sections=None, embedded_global_reference=False, language="c",
+                                        style="plain", sections=None, embedded_global_reference=False,
                                         out_param_location="inputs"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -303,14 +303,14 @@ def generate_function_docx_per_function(function_list, types_json, figures_dir, 
         # -- embedded appendix --
         if embedded_global_reference and embedded_ref_to_type:
             from generators.docx.appendix import _add_embedded_appendix_docx
-            _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language)
+            _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type)
 
         safe_name = _sanitize_filename(fname)
         doc.save(os.path.join(output_dir, f"{safe_name}.docx"))
 
 
 def generate_function_docx_by_file(function_list, types_json, figures_dir, output_dir,
-                                   style="plain", sections=None, embedded_global_reference=False, language="c",
+                                   style="plain", sections=None, embedded_global_reference=False,
                                    out_param_location="inputs"):
     type_defs, type_refs = load_types(types_json)
     type_desc_map = build_type_desc_map(type_defs)
@@ -346,7 +346,7 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
         # -- embedded appendix --
         if embedded_global_reference and embedded_ref_to_type:
             from generators.docx.appendix import _add_embedded_appendix_docx
-            _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type, language)
+            _add_embedded_appendix_docx(doc, type_defs, embedded_ref_to_type)
 
         safe_base = _sanitize_filename(base)
         doc.save(os.path.join(output_dir, f"{safe_base}.docx"))
@@ -354,14 +354,14 @@ def generate_function_docx_by_file(function_list, types_json, figures_dir, outpu
 
 def generate_function_docx(function_list, types_json, figures_dir, output_dir="DOCX",
                            group_by="function", style="plain", sections=None,
-                           embedded_global_reference=False, language="c", out_param_location="inputs"):
+                           embedded_global_reference=False, out_param_location="inputs"):
     functions = function_list
 
     if group_by == "file":
         generate_function_docx_by_file(functions, types_json, figures_dir, output_dir, style=style,
-                                       sections=sections, embedded_global_reference=embedded_global_reference, language=language,
+                                       sections=sections, embedded_global_reference=embedded_global_reference,
                                        out_param_location=out_param_location)
     else:
         generate_function_docx_per_function(functions, types_json, figures_dir, output_dir, style=style,
-                                            sections=sections, embedded_global_reference=embedded_global_reference, language=language,
+                                            sections=sections, embedded_global_reference=embedded_global_reference,
                                             out_param_location=out_param_location)

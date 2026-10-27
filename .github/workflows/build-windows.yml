@@ -32,7 +32,6 @@ jobs:
             --icon assets/swift-doc.ico `
             --collect-all tree_sitter `
             --collect-all tree_sitter_c `
-            --collect-all tree_sitter_ada `
             --noconfirm `
             src/cli.py
 
