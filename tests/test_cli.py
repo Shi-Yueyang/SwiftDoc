@@ -74,7 +74,7 @@ class TestBuildParser:
         assert ns.command == "moduledesign"
         assert ns.root_dir == "/some/project"
         # argparse.SUPPRESS — attributes only exist when explicitly passed
-        assert not hasattr(ns, "lang")
+        assert not hasattr(ns, "ai")
 
     def test_parser_has_config_subcommand(self):
         p = build_parser("/tmp/cache")
@@ -93,7 +93,6 @@ class TestBuildParser:
         p = build_parser("/tmp/cache")
         ns = p.parse_args(["moduledesign", "/proj"])
         # argparse.SUPPRESS — unset attributes are absent
-        assert not hasattr(ns, "lang")
         assert not hasattr(ns, "ai")
         assert not hasattr(ns, "cache_dir")
         assert not hasattr(ns, "output_folder")
@@ -390,7 +389,7 @@ class TestDirectoryShortcut:
     def test_folder_passes_toml_override(self, tmp_path, monkeypatch):
         d = tmp_path / "myproject"
         d.mkdir()
-        (d / "swift-doc.toml").write_text('lang = "c"\n', encoding="utf-8")
+        (d / "swift-doc.toml").write_text('style = "table"\n', encoding="utf-8")
 
         captured = {}
 
@@ -407,6 +406,25 @@ class TestDirectoryShortcut:
         assert captured.get("called")
         override = captured["override"]
         assert override is not None
-        assert override["lang"] == "c"
+        assert override["style"] == "table"
         assert override["root_dir"] == os.path.abspath(str(d))
 
+
+
+class TestRelativeDirectoryRoot:
+    """Regression: a relative directory positional must be absolutized,
+    otherwise analyse_dirs fallback joins the root with itself
+    (e.g. 'examples/c' -> 'examples/c/examples/c') and docgen filters
+    every file out."""
+
+    def test_relative_dir_positional_is_absolutized(self, tmp_path, monkeypatch):
+        from cli import _resolve_config_and_root, build_parser
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / "a.c").write_text("int a(void) { return 1; }\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        p = build_parser("/tmp/cache")
+        ns = p.parse_args(["moduledesign", "proj"])
+        root_dir, _cfg = _resolve_config_and_root(ns)
+        assert root_dir == os.path.abspath("proj")

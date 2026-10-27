@@ -675,3 +675,37 @@ class TestBuildEmbeddedTypeRefs:
         assert embedded_refs == {"A": "A_1", "B": "A_2"}
         assert len(embedded_refs) == 2
         assert "C" not in embedded_refs
+
+
+class TestGlobalDataDedup:
+    def test_pointer_and_array_types_collapse_to_one_row(self, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "md_dedup")
+        figures_dir = str(tmp_path / "figures_dedup")
+        os.makedirs(figures_dir)
+        funcs = [{
+            "name": "analyze",
+            "file": "/proj/analyze.c",
+            "inputs": [
+                {"name": "packet", "kind": "parameter", "type": "Point*", "type_ref": "A_1", "direction": "in"},
+                {"name": "g_points", "kind": "global", "type": "Point[]", "type_ref": "A_1", "direction": "in"},
+            ],
+            "returns": [],
+            "body_code": "",
+            "calls": [],
+            "called_by": [],
+            "algorithm_logic": "Does something.",
+        }]
+        with open(os.path.join(figures_dir, "analyze.png"), "w") as f:
+            f.write("dummy")
+
+        generate_function_md(
+            function_list=funcs,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        content = open(os.path.join(output_dir, "analyze.md"), "r", encoding="utf-8").read()
+        rows = [ln for ln in content.splitlines() if ln.startswith("| Point ")]
+        assert len(rows) == 1
+        assert rows[0].startswith("| Point | A_1 |")

@@ -4,7 +4,7 @@ import logging
 import shutil
 import sys
 
-from parsers import get_parser
+from parsers import CParser
 from generators import get_generator, get_format_extension
 from generators.images import generate_function_graphs
 from core.utils import build_cache_name
@@ -33,20 +33,10 @@ def build_analysis_paths(cache_dir, project_root):
     }
 
 
-def extract_global_variables(root_dir, output_json_path, language="c"):
-    parser = get_parser(language)
-    global_variables = parser.extract_globals(root_dir)
-    with open(output_json_path, "w", encoding="utf-8") as f:
-        json.dump({"globals": global_variables}, f, indent=2, ensure_ascii=False)
-    logger.info("Found %s global variables", len(global_variables))
-    return output_json_path
-
-
 def run_extract_phase(args):
-    parser = get_parser(args.language)
+    parser = CParser()
 
     logger.info(colorize_extract_phase_message("Scanning begins...", EXTRACT_PHASE_START_COLOR))
-    logger.info("Language: %s", args.language)
 
     # -- cache versioning: wipe stale cache when VERSION has changed --
     version_file = os.path.join(args.cache_dir, ".cache_version")

@@ -1,6 +1,6 @@
 # swift-doc
 
-Multi-language code analysis CLI that generates documentation with call graphs.
+C code analysis CLI that generates documentation with call graphs.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ swift-doc moduledesign examples/c
 swift-doc moduledesign my-config.toml
 
 # CLI-only (no config needed)
-swift-doc moduledesign examples/c --lang c --format markdown --group-by function
+swift-doc moduledesign examples/c --format markdown --group-by function
 
 # Scope to specific directories or files
 swift-doc moduledesign examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
@@ -42,7 +42,6 @@ swift-doc moduledesign examples/c --ai on
 | Argument | Default | Description |
 |---|---|---|
 | `root_dir` | auto-discovered | Project root or path to a `.toml` config file |
-| `--lang` | `auto` | Source language (`c` or `auto`) |
 | `--analyse_dir` | root_dir | Subset to generate docs for (repeatable) |
 | `--cache_dir` | platform cache | Intermediate JSON directory |
 | `--output_folder` | `out` | Output directory for docs and figures |
@@ -89,7 +88,6 @@ The tool auto-discovers it when you run `swift-doc moduledesign <project-dir>`.
 root_dir = "my-project"
 
 # Output options
-lang = "c"
 output_folder = "out"
 format = "docx"
 group_by = "file"

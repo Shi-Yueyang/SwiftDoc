@@ -1,16 +1,11 @@
-from parsers.base import BaseParser
 from parsers.types import GlobalVar, TypesData, FuncDef
 from parsers.c.globals import extract_all_globals
 from parsers.c.types import scan_project_types, refresh_type_definitions
 from parsers.c.functions import scan_all_functions, refresh_functions
 
 
-class CParser(BaseParser):
-    language = "c"
-    source_extensions = (".c",)
-    header_extensions = (".h",)
-    supports_types = True
-    supports_globals = True
+class CParser:
+    """C source parser — swift-doc's only language."""
 
     def extract_globals(self, project_dir: str, analyse_dirs: list[str] | None = None) -> list[GlobalVar]:
         return extract_all_globals(project_dir, analyse_dirs=analyse_dirs)

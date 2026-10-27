@@ -15,7 +15,7 @@ else:
 
 # Keys that can appear at the top level of a TOML config.
 _TOP_LEVEL_KEYS = {
-    "root_dir", "lang", "output_folder", "cache_dir",
+    "root_dir", "output_folder", "cache_dir",
     "format", "group_by", "style", "ai", "analyse_dirs", "type",
     "embedded_global_reference", "out_param_location",
 }
@@ -35,7 +35,6 @@ type = "moduledesign"       # document type: "moduledesign"
 root_dir = "."
 
 # --- Output options ---
-# lang = "auto"              # "auto" | "c"
 # output_folder = "out"      # where generated docs land
 # format = "docx"            # "docx" | "markdown"
 # group_by = "file"          # "file" | "function"
@@ -100,7 +99,6 @@ def load_toml(path: str) -> dict:
 
         {
             "root_dir": str | None,
-            "lang": str | None,
             "output_folder": str | None,
             "cache_dir": str | None,
             "format": str | None,

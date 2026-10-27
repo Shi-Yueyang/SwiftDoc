@@ -1,7 +1,7 @@
-"""Shared cache I/O, AI enrichment, and refresh logic for language parsers.
+"""Shared cache I/O, AI enrichment, and refresh logic for the C parser.
 
-Language parsers import from here to avoid duplicating ~400 lines of
-identical cache management and AI orchestration code.
+The C parser imports from here to avoid duplicating cache management and
+AI orchestration code.
 """
 
 import os

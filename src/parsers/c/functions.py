@@ -562,41 +562,97 @@ def _extract_one_function(func_node, c_file_path, type_refs, global_lookup):
     }]
 
 
-def _scan_conditional_macros(raw_code):
+def _macros_from_directive(stripped: str) -> set[str]:
+    """Extract the feature-flag macro names referenced by a single
+    preprocessor conditional line (``#ifdef`` / ``#ifndef`` / ``#if defined()``
+    / ``#elif defined()``).
+
+    Only names in ``defined(...)`` and ``#if(n)def`` guards are captured —
+    bare identifiers in ``#if MACRO`` expressions are intentionally excluded
+    (they could be numeric constants).
+    """
+    macros: set[str] = set()
+
+    # #ifdef MACRO / #ifndef MACRO
+    m = re.match(r"#ifn?def\s+(\w+)", stripped)
+    if m:
+        macros.add(m.group(1))
+        return macros
+
+    # #if defined(MACRO) …  /  #elif defined(MACRO) …
+    m = re.match(r"#(?:if|elif)\s+(.+)", stripped)
+    if m:
+        for dm in re.finditer(r"defined\s*\(\s*(\w+)\s*\)", m.group(1)):
+            macros.add(dm.group(1))
+
+    return macros
+
+
+def _scan_conditional_macros(raw_code: str) -> dict[int, set[str]]:
     """Scan raw C code for conditional compilation macros referenced in
     ``#ifdef`` / ``#ifndef`` / ``#if defined()`` / ``#elif defined()``.
 
-    Returns a ``{line_number: set(macro_names)}`` dict.  Only feature-flag
-    macros are captured — bare identifiers in ``#if MACRO`` expressions are
-    intentionally excluded (they could be numeric constants).
+    Returns a ``{line_number: set(macro_names)}`` dict.
     """
     macros_by_line: dict[int, set[str]] = {}
-    lines = raw_code.split("\n")
-    for i, line in enumerate(lines, 1):
+    for i, line in enumerate(raw_code.split("\n"), 1):
         stripped = line.strip()
-
-        # #ifdef MACRO
-        m = re.match(r"#ifdef\s+(\w+)", stripped)
-        if m:
-            macros_by_line.setdefault(i, set()).add(m.group(1))
+        if not stripped.startswith("#"):
             continue
-
-        # #ifndef MACRO
-        m = re.match(r"#ifndef\s+(\w+)", stripped)
-        if m:
-            macros_by_line.setdefault(i, set()).add(m.group(1))
-            continue
-
-        # #if defined(MACRO) …  /  #elif defined(MACRO) …
-        m = re.match(r"#(?:if|elif)\s+(.+)", stripped)
-        if m:
-            for dm in re.finditer(r"defined\s*\(\s*(\w+)\s*\)", m.group(1)):
-                macros_by_line.setdefault(i, set()).add(dm.group(1))
-
+        macros = _macros_from_directive(stripped)
+        if macros:
+            macros_by_line.setdefault(i, set()).update(macros)
     return macros_by_line
 
 
-def _find_function_start_line(raw_code, func_name):
+def _scan_conditional_regions(
+    raw_code: str,
+) -> list[tuple[int, int, set[str]]]:
+    """Scan raw C code for conditional-compilation *blocks*.
+
+    Each ``#ifdef`` / ``#ifndef`` / ``#if defined()`` … ``#endif`` region is
+    returned as ``(open_line, close_line, macros)``, where *macros* are all
+    the names that gate the block (including those on ``#else`` / ``#elif``
+    branches, which stay inside the same region).  These describe the *span*
+    a guard encloses, so a directive that wraps a whole file (its ``#ifdef``
+    line sits above every function) can still be attributed to the functions
+    it actually guards.  Blocks with no captured macro name are skipped.
+    """
+    lines = raw_code.split("\n")
+    regions: list[tuple[int, int, set[str]]] = []
+    stack: list[tuple[int, set[str]]] = []
+
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        if re.match(r"#if(def|ndef)?\b", stripped):
+            stack.append((i, _macros_from_directive(stripped)))
+            continue
+
+        if re.match(r"#endif\b", stripped):
+            if stack:
+                open_line, macros = stack.pop()
+                if macros:
+                    regions.append((open_line, i, macros))
+            continue
+
+        # #else / #elif stay inside the enclosing region but may add names.
+        if re.match(r"#(?:else|elif)\b", stripped) and stack:
+            stack[-1][1].update(_macros_from_directive(stripped))
+
+    # Unterminated guards extend to end-of-file.
+    eof = len(lines)
+    for open_line, macros in stack:
+        if macros:
+            regions.append((open_line, eof, macros))
+
+    # Outermost guards first (earliest #if, widest span) so a file-level
+    # guard precedes any inner conditional that also encloses a function.
+    regions.sort(key=lambda r: (r[0], -r[1]))
+    return regions
+
+
+def _find_function_start_line(raw_code: str, func_name: str) -> int | None:
     """Locate the raw-source line where *func_name* is defined.
 
     Searches for ``type … func_name(`` patterns, skipping preprocessor
@@ -619,15 +675,23 @@ def _find_function_start_line(raw_code, func_name):
     return None
 
 
-def _augment_functions_from_raw_source(raw_code, functions):
+def _augment_functions_from_raw_source(
+    raw_code: str, functions: list[dict]
+) -> list[dict]:
     """Augment each function dict with raw-source ``start_line`` and
-    ``conditional_macros`` by correlating macro directive lines to function
+    ``conditional_macros`` by correlating macro directives to function
     line ranges.
+
+    A macro is attributed to a function when either (a) its directive line
+    falls inside the function's own line range, or (b) it guards a region
+    that *encloses* the function — a file-wide ``#ifdef … #endif`` whose
+    opening directive sits above every function definition.
     """
     if not functions:
         return functions
 
     line_macros = _scan_conditional_macros(raw_code)
+    regions = _scan_conditional_regions(raw_code)
 
     # Find raw start_line for every function
     for func in functions:
@@ -647,8 +711,18 @@ def _augment_functions_from_raw_source(raw_code, functions):
         else:
             end = raw_line_count
 
-        macros = []
+        macros: list[str] = []
         seen: set[str] = set()
+
+        # (b) Enclosing guards: regions whose span contains this function.
+        for open_line, close_line, guard_macros in regions:
+            if open_line <= start <= close_line:
+                for macro in sorted(guard_macros):
+                    if macro not in seen:
+                        macros.append(macro)
+                        seen.add(macro)
+
+        # (a) Local conditionals inside the function's own line range.
         for ml in all_macro_lines:
             if start <= ml <= end:
                 for macro in sorted(line_macros[ml]):

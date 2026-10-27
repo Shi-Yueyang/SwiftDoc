@@ -13,6 +13,7 @@ from parsers.c.functions import (
     _analyze_pointer_directions,
     _extract_one_function,
     _scan_conditional_macros,
+    _scan_conditional_regions,
     _find_function_start_line,
     _augment_functions_from_raw_source,
     extract_functions_from_c_file,
@@ -798,3 +799,87 @@ class TestAugmentFunctionsFromRawSource:
     def test_empty_functions_list(self):
         result = _augment_functions_from_raw_source("any code", [])
         assert result == []
+
+    def test_file_wide_guard_encloses_every_function(self):
+        """A #ifdef whose line sits above the first function (a file-wide
+        guard) must be attributed to every function inside the block, plus
+        any inner conditional still scoped to its own function."""
+        code = "\n".join([
+            "#include \"foo.h\"",
+            "#ifdef PLATFORM_EVC",
+            "static int ctx;",
+            "void first(void) {",
+            "    first_body();",
+            "}",
+            "void second(void) {",
+            "#ifdef EXTRA_FLAG",
+            "    second_body();",
+            "#endif",
+            "}",
+            "void third(void) {",
+            "    third_body();",
+            "}",
+            "#endif",
+        ])
+        funcs = [
+            {"name": "first", "file": "test.c", "start_line": 0},
+            {"name": "second", "file": "test.c", "start_line": 0},
+            {"name": "third", "file": "test.c", "start_line": 0},
+        ]
+        _augment_functions_from_raw_source(code, funcs)
+
+        # PLATFORM_EVC guards the whole file → on every function.
+        assert funcs[0]["conditional_macros"] == ["PLATFORM_EVC"]
+        # second additionally has a function-local guard.
+        assert funcs[1]["conditional_macros"] == ["PLATFORM_EVC", "EXTRA_FLAG"]
+        assert funcs[2]["conditional_macros"] == ["PLATFORM_EVC"]
+
+
+class TestScanConditionalRegions:
+    """Tests for _scan_conditional_regions — span of each guard block."""
+
+    def test_ifdef_span(self):
+        code = "\n".join([
+            "#ifdef FEATURE_X",
+            "int a;",
+            "void f(void) {}",
+            "#endif",
+        ])
+        assert _scan_conditional_regions(code) == [(1, 4, {"FEATURE_X"})]
+
+    def test_else_and_elif_stay_in_region(self):
+        code = "\n".join([
+            "#if defined(A)",
+            "a();",
+            "#elif defined(B)",
+            "b();",
+            "#else",
+            "c();",
+            "#endif",
+        ])
+        regions = _scan_conditional_regions(code)
+        assert regions == [(1, 7, {"A", "B"})]
+
+    def test_nested_regions(self):
+        code = "\n".join([
+            "#ifdef OUTER",
+            "#ifdef INNER",
+            "x();",
+            "#endif",
+            "#endif",
+        ])
+        regions = _scan_conditional_regions(code)
+        assert (1, 5, {"OUTER"}) in regions
+        assert (2, 4, {"INNER"}) in regions
+
+    def test_bare_if_excluded(self):
+        code = "#if BUFFER_SIZE > 256\nx();\n#endif\n"
+        assert _scan_conditional_regions(code) == []
+
+    def test_unterminated_guard_extends_to_eof(self):
+        code = "\n".join([
+            "#ifdef OPEN",
+            "x();",
+            "y();",
+        ])
+        assert _scan_conditional_regions(code) == [(1, 3, {"OPEN"})]

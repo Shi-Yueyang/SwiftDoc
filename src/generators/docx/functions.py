@@ -129,19 +129,20 @@ def _add_output_table(doc, returns, heading_level, return_type="", out_params=No
 def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level,
                           return_type=""):
     global_types = {}
-    # Collect from inputs (parameters + global variables)
+    # Collect from inputs (parameters + global variables), keyed by the
+    # stripped base type so "T*" and "T[]" collapse into one row
     for inp in inputs:
         typ = inp.get("type", "")
         ref = inp.get("type_ref", "")
         if typ and ref and ref not in ("", "NA", "N/A"):
             base_type = _extract_base_type_name(typ)
-            if base_type in type_refs and typ not in global_types:
-                global_types[typ] = ref
+            if base_type in type_refs and base_type not in global_types:
+                global_types[base_type] = ref
     # Also include the return type if it references a known global type
     if return_type:
         base_type = _extract_base_type_name(return_type)
-        if base_type in type_refs and return_type not in global_types:
-            global_types[return_type] = type_refs[base_type]
+        if base_type in type_refs and base_type not in global_types:
+            global_types[base_type] = type_refs[base_type]
 
     doc.add_heading("全局数据结构", level=heading_level)
     table = doc.add_table(rows=1, cols=3)
@@ -149,9 +150,8 @@ def _add_global_data_table(doc, inputs, type_refs, type_desc_map, heading_level,
     _style_header_row(table, ["类型Type", "参考Ref", "描述Description"])
 
     if global_types:
-        for typ, ref in global_types.items():
+        for base_type, ref in global_types.items():
             row = table.add_row()
-            base_type = _extract_base_type_name(typ)
             _set_cell_text(row.cells[0], base_type)
             ref_code = type_refs.get(base_type, ref)
             _set_cell_text(row.cells[1], ref_code)

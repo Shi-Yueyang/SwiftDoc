@@ -14,14 +14,12 @@ from config.manager import (
 )
 from config.toml_config import load_toml, find_config, DEFAULT_CONFIG_NAME, DEFAULT_CONFIG_TEMPLATE
 from _version import VERSION
-from parsers import detect_language
 from pipeline import run_extract_phase, run_docgen_phase
 from core.utils import get_default_cache_dir
 
 
 # -- built-in defaults for generate params (used when neither CLI nor TOML sets them) --
 _DEFAULTS = {
-    "lang": "auto",
     "output_folder": "out",
     "format": "docx",
     "group_by": "file",
@@ -78,7 +76,7 @@ def _resolve_config_and_root(cli_args):
         if not os.path.isdir(positional):
             print(f"Error: directory not found: {positional}", file=sys.stderr)
             sys.exit(1)
-        root_dir = positional
+        root_dir = os.path.abspath(positional)
         config_path = find_config(root_dir)
         if config_path:
             toml_config = load_toml(config_path)
@@ -143,7 +141,7 @@ def build_parser(default_cache_dir):
 
   Generate documentation from a source directory:
     swift-doc md examples/c
-    swift-doc md examples/c --lang c --style plain
+    swift-doc md examples/c --style plain
 
   Configure AI:
     swift-doc config-ai
@@ -181,7 +179,7 @@ def build_parser(default_cache_dir):
 
     moduledesign_examples = """Examples:
     swift-doc md examples/c
-    swift-doc md examples/c --lang c --style plain
+    swift-doc md examples/c --style plain
     swift-doc md examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
     swift-doc md examples/c --group-by file --format markdown
     swift-doc md examples/c --ignore-calls free --ignore-calls malloc
@@ -199,11 +197,6 @@ def build_parser(default_cache_dir):
         nargs="?",
         default=argparse.SUPPRESS,
         help="Project root directory or a single source file",
-    )
-    moduledesign_parser.add_argument(
-        "--lang",
-        default=argparse.SUPPRESS,
-        help="Source language for parsing (auto-detected if not specified, default: auto)",
     )
     moduledesign_parser.add_argument(
         "--analyse_dir",
@@ -373,7 +366,6 @@ def _run_moduledesign(cli_args, toml_config_override=None):
     else:
         root_dir, toml_config = _resolve_config_and_root(cli_args)
 
-    lang = _resolve("lang", cli_args, toml_config, _DEFAULTS["lang"])
     output_folder = _resolve("output_folder", cli_args, toml_config, _DEFAULTS["output_folder"])
     cache_dir = _resolve("cache_dir", cli_args, toml_config, default_cache_dir)
     fmt = _resolve("format", cli_args, toml_config, _DEFAULTS["format"])
@@ -430,15 +422,11 @@ def _run_moduledesign(cli_args, toml_config_override=None):
     if ai == "on":
         ensure_ai_config_interactive()
 
-    if lang == "auto":
-        lang = detect_language(root_dir)
-
     extract_args = argparse.Namespace(
         root_dir=root_dir,
         cache_dir=cache_dir,
         ai=ai,
         ai_workers=ai_workers,
-        language=lang,
         analyse_dirs=analyse_dirs,
         defines=defines,
     )

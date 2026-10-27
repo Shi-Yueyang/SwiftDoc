@@ -100,22 +100,21 @@ def _write_function_section(func, type_refs, type_desc_map, figures_dir, style="
             ref = inp.get("type_ref", "")
             if typ and ref and ref not in ("", "NA", "N/A"):
                 base_type = _extract_base_type_name(typ)
-                if base_type in type_refs and typ not in global_types:
-                    global_types[typ] = ref
+                if base_type in type_refs and base_type not in global_types:
+                    global_types[base_type] = ref
         # Also include the return type if it references a known global type
         return_type = func.get("return_type", "")
         if return_type:
             base_type = _extract_base_type_name(return_type)
-            if base_type in type_refs and return_type not in global_types:
-                global_types[return_type] = type_refs[base_type]
+            if base_type in type_refs and base_type not in global_types:
+                global_types[base_type] = type_refs[base_type]
 
 
         lines.append("### 全局数据结构")
         lines.append("| 类型Type | 参考Ref | 描述Description |")
         lines.append("|----------|---------|------------------|")
         if global_types:
-            for typ, ref in global_types.items():
-                base_type = _extract_base_type_name(typ)
+            for base_type, ref in global_types.items():
                 ref_code = type_refs.get(base_type, ref)
                 desc = type_desc_map.get(base_type, "") or "N/A"
                 lines.append(f"| {base_type} | {ref_code} | {desc} |")

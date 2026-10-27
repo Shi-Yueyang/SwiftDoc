@@ -13,7 +13,7 @@ See [README.md](README.md) for build, test, and CLI commands.
 1. **Extract phase** (`run_extract_phase`): Walks the source tree, parses source files with tree-sitter, extracts globals/types/functions, optionally enriches with AI descriptions, and writes JSON caches to the cache dir. Cache stores COMPLETE data — no filtering here.
 2. **Docgen phase** (`run_docgen_phase`): Reads cached JSON, filters functions by `--analyse_dir`, applies `--ignore-calls`/`--ignore-types` filtering at docgen time (cache stays untainted), generates docs and call-graph PNGs.
 
-**Parser plugin system** (`parsers/`): `BaseParser` is the ABC with `extract_functions()`, `extract_globals()`, and `extract_types()`. `CParser` is the current implementation. New languages are registered via `parsers/__init__.py` → `register_parser()`.
+**Parsers** (`parsers/`): swift-doc is C-only. `CParser` (`parsers/c/`, re-exported from `parsers/__init__.py`) provides `extract_functions()`, `extract_globals()`, and `extract_types()`; `pipeline.run_extract_phase` instantiates it directly. There is no language registry or `--lang` flag.
 
 **Generator plugin system** (`generators/`): Supports `markdown` and `docx` formats (default: `docx`). Modules must export `generate_functions()` and `generate_appendix()`. Registered in `generators/__init__.py`.
 
@@ -22,7 +22,7 @@ See [README.md](README.md) for build, test, and CLI commands.
 **C parsing** (`parsers/c/`): Three tree-sitter-based extractors:
 - `globals.py` — walks declarations outside functions, distinguishes static/extern/definition
 - `types.py` — regex-based extraction of typedefs/structs/unions/enums from `.h` files, with comment association
-- `functions.py` — parses `.c` files for function definitions, resolves parameter types, pointer parameter directions (in/out/in out), global variable reads/writes (with direction), return types, and call relationships; builds `called_by` cross-references. Hardcoded call filter: `_IGNORED_CALLS = {"memcpy", "memset"}`.
+- `functions.py` — parses `.c` files for function definitions, resolves parameter types, pointer parameter directions (in/out/in out), global variable reads/writes (with direction), return types, and call relationships; builds `called_by` cross-references. Hardcoded call filter: `_IGNORED_CALLS = {"memcpy", "memset"}`. Each function also gets `conditional_macros` — the feature-flag names (`#ifdef`/`#ifndef`/`#if defined()`) that apply to it, attributed two ways by `_augment_functions_from_raw_source`: directives whose line falls inside the function's own raw-source range, **and** directives guarding a region that *encloses* the function (`_scan_conditional_regions`), so a file-wide `#ifdef … #endif` above the first function still lands on every function it wraps.
 
 **Change detection** (`core/compare.py`): `compare_functions()` and `compare_types()` diff fresh extractions against cached data using `normalized_body` (whitespace-stripped) or structural type keys. Only changed items trigger AI re-runs. Supports rename detection by matching bodies/structures across added/removed sets.
 
@@ -52,7 +52,6 @@ Discovery flow in `cli.py:_resolve_config_and_root()`:
 Example:
 ```toml
 root_dir = "examples/c"
-lang = "c"
 format = "docx"
 group_by = "file"
 style = "plain"

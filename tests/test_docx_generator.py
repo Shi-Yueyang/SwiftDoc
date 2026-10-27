@@ -246,3 +246,39 @@ class TestGenerateAppendixDocx:
         output_path = str(tmp_path / "appendix_missing.docx")
         generate_appendix_docx({}, output_path)
         # Should not crash, just log warning
+
+
+class TestGlobalDataDedupDocx:
+    def test_pointer_and_array_types_collapse_to_one_row(self, sample_types_json, tmp_path):
+        output_dir = str(tmp_path / "docx_dedup")
+        figures_dir = str(tmp_path / "figures_docx_dedup")
+        funcs = [{
+            "name": "analyze",
+            "file": "/proj/analyze.c",
+            "inputs": [
+                {"name": "packet", "kind": "parameter", "type": "Point*", "type_ref": "A_1", "direction": "in"},
+                {"name": "g_points", "kind": "global", "type": "Point[]", "type_ref": "A_1", "direction": "in"},
+            ],
+            "returns": [],
+            "body_code": "",
+            "calls": [],
+            "called_by": [],
+            "algorithm_logic": "Does something.",
+        }]
+        _create_dummy_figures(funcs, figures_dir)
+
+        generate_function_docx(
+            function_list=funcs,
+            types_json=sample_types_json,
+            figures_dir=figures_dir,
+            output_dir=output_dir,
+        )
+
+        doc = Document(os.path.join(output_dir, "analyze.docx"))
+        global_tables = [
+            t for t in doc.tables
+            if len(t.columns) == 3 and t.rows[0].cells[0].text == "类型Type"
+        ]
+        assert global_tables
+        rows = [r for t in global_tables for r in t.rows[1:] if r.cells[0].text == "Point"]
+        assert len(rows) == 1

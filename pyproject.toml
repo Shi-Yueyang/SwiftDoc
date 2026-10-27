@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "swift-doc"
 version = "0.1.0"
-description = "Multi-language code analysis CLI that generates graphs and documentation"
+description = "C code analysis CLI that generates graphs and documentation"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

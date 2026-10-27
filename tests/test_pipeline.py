@@ -6,7 +6,6 @@ import pytest
 from pipeline import (
     build_analysis_paths,
     colorize_extract_phase_message,
-    extract_global_variables,
     run_extract_phase,
     run_docgen_phase,
     EXTRACT_PHASE_START_COLOR,
@@ -53,29 +52,12 @@ class TestColorizeExtractPhaseMessage:
         assert COLOR_RESET not in result
 
 
-class TestExtractGlobalVariables:
-    def test_extracts_from_c_file(self, sample_c_file):
-        output = os.path.join(os.path.dirname(sample_c_file), "globals_test.json")
-        result = extract_global_variables(os.path.dirname(sample_c_file), output)
-        assert os.path.exists(output)
-        with open(output, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        assert "globals" in data
-        names = [g["name"] for g in data["globals"]]
-        assert "counter" in names or "global_mode" in names
-
-    def test_returns_output_path(self, sample_c_file):
-        output = os.path.join(os.path.dirname(sample_c_file), "globals_test2.json")
-        result = extract_global_variables(os.path.dirname(sample_c_file), output)
-        assert result == output
-
-
 class TestRunExtractPhase:
     def test_creates_cache_directory(self, sample_c_project, tmp_path):
         cache_dir = str(tmp_path / "extract_cache")
         import argparse
 
-        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="off", language="c")
+        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="off")
         run_extract_phase(args)
         assert os.path.isdir(cache_dir)
 
@@ -83,7 +65,7 @@ class TestRunExtractPhase:
         cache_dir = str(tmp_path / "extract_cache2")
         import argparse
 
-        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="off", language="c")
+        args = argparse.Namespace(root_dir=sample_c_project, cache_dir=cache_dir, ai="off")
         run_extract_phase(args)
         paths = build_analysis_paths(cache_dir, sample_c_project)
         assert os.path.exists(paths["globals"])
@@ -110,7 +92,6 @@ class TestRunExtractPhase:
             root_dir=project_dir,
             cache_dir=cache_dir,
             ai="off",
-            language="c",
             analyse_dirs=[target_file],
         )
         run_extract_phase(args)
@@ -265,7 +246,7 @@ class TestIntegrationC:
 
         # Extract phase
         extract_args = argparse.Namespace(
-            root_dir=c_example_dir, cache_dir=cache_dir, ai="off", language="c",
+            root_dir=c_example_dir, cache_dir=cache_dir, ai="off",
         )
         run_extract_phase(extract_args)
 
@@ -318,7 +299,7 @@ class TestIntegrationC:
         out_dir = str(tmp_path / "out")
 
         extract_args = argparse.Namespace(
-            root_dir=c_example_dir, cache_dir=cache_dir, ai="off", language="c",
+            root_dir=c_example_dir, cache_dir=cache_dir, ai="off",
         )
         run_extract_phase(extract_args)
 
