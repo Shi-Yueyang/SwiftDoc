@@ -35,99 +35,138 @@ parser = Parser(C_LANGUAGE)
 _IGNORED_CALLS = {"memcpy", "memset"}
 
 
+def _collect_file_defines(lines: list[str]) -> set:
+    """Gather macro names ``#define``d anywhere in the file.
+
+    The preprocessor cannot see included headers, so file-local
+    ``#define NAME`` / ``#define NAME(...)`` count as defined.
+    """
+    names: set = set()
+    for line in lines:
+        m = re.match(r"^\s*#\s*define\s+([A-Za-z_]\w*)", line)
+        if m:
+            names.add(m.group(1))
+    return names
+
+
+def _eval_if_expr(expr: str, known: set, lineno: int) -> bool | None:
+    """Evaluate a ``#if`` / ``#elif`` condition.
+
+    Returns True/False, or None when the expression cannot be resolved.
+    ``defined(NAME)`` and ``defined NAME`` use *known*; remaining
+    identifiers become 0 (per the C preprocessor, undefined names are
+    0 in constant expressions).
+    """
+    resolved = re.sub(
+        r"defined\s*\(\s*([A-Za-z_]\w*)\s*\)",
+        lambda mo: "1" if mo.group(1) in known else "0",
+        expr,
+    )
+    resolved = re.sub(
+        r"defined\s+([A-Za-z_]\w*)",
+        lambda mo: "1" if mo.group(1) in known else "0",
+        resolved,
+    )
+    # Any other identifier: known macro → 1 (truthy), unknown → 0
+    resolved = re.sub(
+        r"[A-Za-z_]\w*",
+        lambda mo: "1" if mo.group(0) in known else "0",
+        resolved,
+    )
+    try:
+        return bool(eval(resolved, {"__builtins__": {}}))
+    except Exception:
+        logger.debug(
+            "Cannot evaluate #if expression %r at line %d", expr, lineno,
+        )
+        return None
+
+
 def preprocess_c_code(code: str, defines: set | None = None) -> str:
-    """Resolve ``#ifdef`` / ``#ifndef`` / ``#else`` / ``#endif`` directives.
+    """Resolve ``#if`` / ``#ifdef`` / ``#ifndef`` / ``#elif`` / ``#else``.
 
-    Lines guarded by ``#ifdef MACRO`` are kept only when *MACRO* is in
-    *defines*; ``#ifndef MACRO`` is the inverse.  ``#else`` flips the
-    current branch's active state.  Directive lines themselves are always
-    stripped from the output.
-
-    ``#if EXPR`` is handled conservatively: if *defines* is non-empty we
-    try to resolve ``defined(NAME)`` sub-expressions; otherwise the whole
-    ``#if`` … ``#endif`` region is kept active (logged at DEBUG level).
+    Each nesting level tracks whether a branch of its ``#if`` chain has
+    already been taken, so exactly one branch survives — never two
+    (variant ``return`` statements leaking into function analysis) and
+    never zero.  ``#ifdef``/``#ifndef`` test the macro against *defines*
+    plus names ``#define``d in the file itself.  ``#if`` expressions are
+    evaluated via ``defined()`` resolution with unknown identifiers → 0
+    (C semantics); ``#if 0`` is therefore always dropped.  An expression
+    that still cannot be resolved conservatively keeps its first branch
+    and marks the chain as taken.  Directive lines are stripped; other
+    lines (including ``#define``) are emitted only while every open
+    level is active.
     """
     if defines is None:
         defines = set()
 
     lines = code.split("\n")
+    known = set(defines) | _collect_file_defines(lines)
+
     result = []
-    # Each stack entry: bool — whether the current branch is active
-    stack: list[bool] = []
+    # Each stack entry: [active, taken] — is the current branch selected,
+    # and has any branch of this level's #if chain been selected?
+    stack: list[list[bool]] = []
 
     for lineno, line in enumerate(lines, 1):
         stripped = line.strip()
 
         # --- #ifdef MACRO ---
-        m = re.match(r"^#ifdef\s+(\w+)", stripped)
+        m = re.match(r"^#\s*ifdef\s+(\w+)", stripped)
         if m:
-            stack.append(m.group(1) in defines)
+            active = m.group(1) in known
+            stack.append([active, active])
             continue
 
         # --- #ifndef MACRO ---
-        m = re.match(r"^#ifndef\s+(\w+)", stripped)
+        m = re.match(r"^#\s*ifndef\s+(\w+)", stripped)
         if m:
-            stack.append(m.group(1) not in defines)
+            active = m.group(1) not in known
+            stack.append([active, active])
+            continue
+
+        # --- #if EXPR ---
+        m = re.match(r"^#\s*if\s+(.+)", stripped)
+        if m:
+            value = _eval_if_expr(m.group(1), known, lineno)
+            # Unresolvable: conservatively keep the first branch
+            active = True if value is None else value
+            stack.append([active, active])
+            continue
+
+        # --- #elif EXPR ---
+        m = re.match(r"^#\s*elif\s+(.+)", stripped)
+        if m:
+            if stack:
+                entry = stack[-1]
+                if entry[1]:  # an earlier branch already won
+                    entry[0] = False
+                else:
+                    value = _eval_if_expr(m.group(1), known, lineno)
+                    active = True if value is None else value
+                    entry[0] = active
+                    entry[1] = entry[1] or active
             continue
 
         # --- #else ---
-        if re.match(r"^#else\s*$", stripped):
+        if re.match(r"^#\s*else\b", stripped):
             if stack:
-                stack[-1] = not stack[-1]
+                entry = stack[-1]
+                if not entry[1]:  # no branch taken yet → #else wins
+                    entry[0] = True
+                    entry[1] = True
+                else:
+                    entry[0] = False
             continue
 
         # --- #endif ---
-        if re.match(r"^#endif\s*$", stripped):
+        if re.match(r"^#\s*endif\b", stripped):
             if stack:
                 stack.pop()
             continue
 
-        # --- #if EXPR (conservative: try defined(), else keep active) ---
-        m = re.match(r"^#if\s+(.+)", stripped)
-        if m:
-            expr = m.group(1)
-            active = True  # default: keep visible
-            if defines:
-                # Resolve defined(NAME) → True/False
-                resolved = re.sub(
-                    r"defined\s*\(\s*(\w+)\s*\)",
-                    lambda mo: "1" if mo.group(1) in defines else "0",
-                    expr,
-                )
-                # Replace bare macro names with 1/0
-                for d in sorted(defines, key=len, reverse=True):
-                    resolved = re.sub(
-                        r"\b" + re.escape(d) + r"\b", "1", resolved
-                    )
-                # Any remaining identifier → 0
-                resolved = re.sub(r"\b[a-zA-Z_]\w*\b", "0", resolved)
-                try:
-                    active = bool(eval(resolved, {"__builtins__": {}}))
-                except Exception:
-                    logger.debug(
-                        "Cannot evaluate #if expression %r at line %d, "
-                        "keeping region active",
-                        expr, lineno,
-                    )
-            else:
-                logger.debug(
-                    "No --define flags; #if expression %r at line %d "
-                    "kept active (conservative default)",
-                    expr, lineno,
-                )
-            stack.append(active)
-            continue
-
-        # --- #elif EXPR ---
-        m = re.match(r"^#elif\s+(.+)", stripped)
-        if m and stack:
-            # Flip: #elif is active only if the previous branch wasn't
-            stack[-1] = not stack[-1]
-            continue
-
         # --- Emit or skip ---
-        is_active = all(stack) if stack else True
-        if is_active:
+        if all(active for active, _taken in stack):
             result.append(line)
 
     return "\n".join(result)
@@ -183,21 +222,35 @@ def find_parameters(declarator_node):
 
 # 提取return语句
 def find_return_statements(func_body_node):
+    """Collect distinct return expressions, in source order.
+
+    Bare ``return;`` yields nothing; repeated expressions (guard-clause
+    style ``return ret;``) collapse to a single entry.  The expression
+    is taken from the statement's named child, so identifiers merely
+    *containing* "return" (``g_return_val``) survive intact.
+    """
     returns = []
     if func_body_node is None:
         return returns
+    collected = []
     stack = [func_body_node]
     while stack:
         node = stack.pop()
         if node.type == "return_statement":
-            text = get_node_text(node)
-            expr = text.replace("return", "").strip()
-            if expr.endswith(";"):
-                expr = expr[:-1].strip()
-            returns.append(expr)
+            expr = ""
+            for child in node.children:
+                if child.is_named:
+                    expr = get_node_text(child).strip()
+                    break
+            if expr:
+                collected.append((node.start_byte, expr))
         else:
             for child in node.children:
                 stack.append(child)
+    collected.sort(key=lambda item: item[0])
+    for _byte, expr in collected:
+        if expr not in returns:
+            returns.append(expr)
     return returns
 
 

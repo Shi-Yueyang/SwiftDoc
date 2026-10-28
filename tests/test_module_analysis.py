@@ -5,6 +5,7 @@ import pytest
 from parsers.c.functions import (
     find_parameters,
     find_return_statements,
+    preprocess_c_code,
     extract_calls_from_body,
     clean_function_body,
     normalize_c_code,
@@ -119,6 +120,183 @@ class TestFindReturnStatements:
         body = func_node.child_by_field_name("body")
         returns = find_return_statements(body)
         assert returns == []
+
+    def test_bare_return_ignored(self):
+        code = "void f() { if (a) { return; } return; }"
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "f")
+        body = func_node.child_by_field_name("body")
+        assert find_return_statements(body) == []
+
+    def test_duplicate_expressions_deduped(self):
+        code = """
+        int f(int flag) {
+            if (a) { return ret; }
+            if (b) { return ret; }
+            if (c) { return OBS_FALSE; }
+            return ret;
+        }
+        """
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "f")
+        body = func_node.child_by_field_name("body")
+        returns = find_return_statements(body)
+        assert returns == ["ret", "OBS_FALSE"]
+
+    def test_preserves_source_order(self):
+        code = """
+        int f(void) {
+            if (a) { return first; }
+            if (b) { return second; }
+            return third;
+        }
+        """
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "f")
+        body = func_node.child_by_field_name("body")
+        assert find_return_statements(body) == ["first", "second", "third"]
+
+    def test_identifier_containing_return_not_corrupted(self):
+        code = "int f(void) { return g_return_val; }"
+        root = parse_c_code(code)
+        func_node = find_first_function_node(root, "f")
+        body = func_node.child_by_field_name("body")
+        assert find_return_statements(body) == ["g_return_val"]
+
+
+class TestPreprocessCCode:
+    def test_if_elif_else_keeps_only_first_true_branch(self):
+        code = """
+#if (MODEL == MODEL_A)
+    return from_a;
+#elif (MODEL == MODEL_B)
+    return from_b;
+#else
+    return fallback;
+#endif
+"""
+        # Two unknown macros compare 0 == 0 → true, first branch only
+        out = preprocess_c_code(code, set())
+        assert "from_a" in out
+        assert "from_b" not in out
+        assert "fallback" not in out
+
+    def test_elif_selected_when_if_false(self):
+        code = """
+#if defined(SOME_A)
+    return from_a;
+#elif defined(SOME_B)
+    return from_b;
+#else
+    return fallback;
+#endif
+"""
+        out = preprocess_c_code(code, {"SOME_B"})
+        assert "from_a" not in out
+        assert "from_b" in out
+        assert "fallback" not in out
+
+    def test_else_kept_when_no_branch_taken(self):
+        code = """
+#ifdef VARIANT_A
+    return from_a;
+#else
+    return fallback;
+#endif
+"""
+        out = preprocess_c_code(code, set())
+        assert "from_a" not in out
+        assert "fallback" in out
+
+    def test_if_zero_drops_region(self):
+        code = """
+#if 0
+    return dead_code;
+#endif
+    return live;
+"""
+        out = preprocess_c_code(code, set())
+        assert "dead_code" not in out
+        assert "live" in out
+
+    def test_unevaluable_keeps_first_branch_only(self):
+        code = """
+#if (BROKEN_EXPR(
+    return first;
+#else
+    return second;
+#endif
+"""
+        out = preprocess_c_code(code, set())
+        assert "first" in out
+        assert "second" not in out
+
+    def test_file_local_define_activates_ifdef(self):
+        code = """
+#define SDMU_MODEL_SAFE
+#ifdef SDMU_MODEL_SAFE
+    return safe_model;
+#else
+    return other_model;
+#endif
+"""
+        out = preprocess_c_code(code, set())
+        assert "safe_model" in out
+        assert "other_model" not in out
+
+    def test_user_defines_override_absence(self):
+        code = """
+#ifdef EXT_FLAG
+    return on;
+#else
+    return off;
+#endif
+"""
+        assert "on" in preprocess_c_code(code, {"EXT_FLAG"})
+        assert "off" in preprocess_c_code(code, set())
+
+    def test_nested_if_in_inactive_parent_dropped(self):
+        code = """
+#ifdef NOT_DEFINED
+    #ifdef ALSO_NOT_DEFINED
+        return phantom;
+    #else
+        return phantom2;
+    #endif
+#else
+    return real;
+#endif
+"""
+        out = preprocess_c_code(code, set())
+        assert "phantom" not in out
+        assert "phantom2" not in out
+        assert "real" in out
+
+    def test_no_returns_leak_from_variant_branches(self):
+        """Regression: inactive #if variants were double-counted as
+        return statements in function analysis (SDMU_input_process)."""
+        code = """
+static void SDMU_input_process(void)
+{
+    uint8 ret = 0;
+#if (SDMU_MODEL == MODEL_SAFE)
+    if (err1) { return ret; }
+    return SDMU_safe_mmu_info.motion_dir;
+#elif (SDMU_MODEL == MODEL_PRECISE)
+    if (err2) { return ret; }
+    return SDMU_precise_mmu_info.dis_precise;
+#else
+    return;
+#endif
+}
+"""
+        out = preprocess_c_code(code, set())
+        assert "SDMU_precise_mmu_info" not in out
+        root = parse_c_code(out)
+        func_node = find_first_function_node(root, "SDMU_input_process")
+        assert func_node is not None
+        body = func_node.child_by_field_name("body")
+        assert find_return_statements(body) == ["ret", "SDMU_safe_mmu_info.motion_dir"]
 
 
 class TestExtractCallsFromBody:
