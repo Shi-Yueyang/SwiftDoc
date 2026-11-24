@@ -18,19 +18,19 @@ file) — docs per file, call-graph PNGs in `figures/`, and a type appendix.
 
 ## Usage
 
-There is exactly **one** way to run swift-doc — give it a TOML config file:
+Point swift-doc at a TOML config file:
 
 ```bash
 swift-doc <config.toml>
 ```
 
-On Windows you can also drag a `swift-doc.toml` onto `swift-doc.exe`.
-There are no CLI flags; every option lives in the config file. Relative paths
-(`root_dir`, `output_folder`, `cache_dir`) resolve against the config file's
-directory, and `analyse_dirs` entries resolve against `root_dir`.
+On Windows, drag a `swift-doc.toml` onto `swift-doc.exe` for the same result.
+The config file carries every option. Relative paths (`root_dir`,
+`output_folder`, `cache_dir`) resolve against the config file's directory,
+and `analyse_dirs` entries resolve against `root_dir`.
 
-A template config is available in the release bundle (`swift-doc.toml`) and at
-[`examples/c/swift-doc.toml`](examples/c/swift-doc.toml).
+Start from the template config in the release bundle, or from the worked
+example at [`examples/c/swift-doc.toml`](examples/c/swift-doc.toml).
 
 ## Project Configuration (`swift-doc.toml`)
 
@@ -79,9 +79,9 @@ kinds = []
 
 ## AI Configuration
 
-AI-powered descriptions are used when `ai = "on"`. The first run prompts you
+Set `ai = "on"` to enrich descriptions with AI. The first run prompts you
 through an interactive onboarding (API key, base URL, model name); settings
-are then stored per-user and can be edited directly in that file:
+are stored per-user and stay editable in that file:
 
 | OS | Path |
 |---|---|
@@ -94,7 +94,7 @@ Keys: `api_key`, `base_url`, `model_name` (required); `temperature` (1.0),
 
 ## Windows Release
 
-The `Build Windows release` GitHub workflow produces an artifact containing:
+The `Build Windows release` GitHub workflow ships an artifact with:
 
 - `swift-doc.exe` — the single-file executable
 - `README.md`
