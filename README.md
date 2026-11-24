@@ -10,79 +10,51 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 # Run on the built-in C example
-swift-doc moduledesign examples/c --ai off
+swift-doc examples/c/swift-doc.toml
 ```
 
-Output lands in `out/` by default — docs per file, call-graph PNGs in `out/figures/`, and a type appendix.
+Output lands in the config's `output_folder` (default `out/` next to the config
+file) — docs per file, call-graph PNGs in `figures/`, and a type appendix.
 
-## Commands
+## Usage
 
-### `moduledesign` — analyze source and produce docs
+There is exactly **one** way to run swift-doc — give it a TOML config file:
 
 ```bash
-# Project directory (auto-discovers swift-doc.toml inside)
-swift-doc moduledesign examples/c
-
-# Explicit TOML config file
-swift-doc moduledesign my-config.toml
-
-# CLI-only (no config needed)
-swift-doc moduledesign examples/c --format markdown --group-by function
-
-# Scope to specific directories or files
-swift-doc moduledesign examples/c --analyse_dir examples/c/bsw --analyse_dir examples/c/drivers
-
-# Filter noisy calls from call graphs
-swift-doc moduledesign examples/c --ignore-calls free --ignore-calls malloc
-
-# With AI-powered descriptions (requires config)
-swift-doc moduledesign examples/c --ai on
+swift-doc <config.toml>
 ```
 
-| Argument | Default | Description |
-|---|---|---|
-| `root_dir` | auto-discovered | Project root or path to a `.toml` config file |
-| `--analyse_dir` | root_dir | Subset to generate docs for (repeatable) |
-| `--cache_dir` | platform cache | Intermediate JSON directory |
-| `--output_folder` | `out` | Output directory for docs and figures |
-| `--ai` | `off` | `on` / `off` for AI-generated descriptions |
-| `--format` | `docx` | Output format (`markdown`, `docx`) |
-| `--group-by` | `file` | Group docs per `function` or per `file` |
-| `--style` | `plain` | Call-graph style (`plain` black/white, or `table` inline) |
-| `--ignore-kinds` | — | Type kinds to exclude: struct, union, enum, typedef (repeatable) |
-| `--ignore-calls` | — | Function names to exclude from call graphs (repeatable) |
-| `--ignore-types` | — | Type names to exclude from extraction (repeatable) |
-| `--verbose` | off | Enable debug logging |
+On Windows you can also drag a `swift-doc.toml` onto `swift-doc.exe`.
+There are no CLI flags; every option lives in the config file. Relative paths
+(`root_dir`, `output_folder`, `cache_dir`) resolve against the config file's
+directory, and `analyse_dirs` entries resolve against `root_dir`.
 
-### `config` — manage AI settings
-
-```bash
-swift-doc config                    # interactive onboarding
-swift-doc config temperature 0.7   # set single value
-swift-doc config max_tokens 1500
-swift-doc config retry_count 3
-```
-
-Settings are stored per-user:
-
-| OS | Path |
-|---|---|
-| Linux | `~/.config/swift-doc/config.json` |
-| macOS | `~/Library/Application Support/swift-doc/config.json` |
-| Windows | `%APPDATA%\swift-doc\config.json` |
-
-### `clear-cache` — remove cached analysis data
-
-```bash
-swift-doc clear-cache                     # clears the last-used cache dir
-swift-doc clear-cache --cache_dir .analysis  # clears a specific cache dir
-swift-doc clear                           # alias for clear-cache
-```
+A template config is available in the release bundle (`swift-doc.toml`) and at
+[`examples/c/swift-doc.toml`](examples/c/swift-doc.toml).
 
 ## Project Configuration (`swift-doc.toml`)
 
-Place a `swift-doc.toml` in your project root to avoid typing CLI flags every time.
-The tool auto-discovers it when you run `swift-doc moduledesign <project-dir>`.
+| Key | Default | Description |
+|---|---|---|
+| `root_dir` | *required* | Project root to analyze |
+| `analyse_dirs` | `[root_dir]` | Subset of directories/files to generate docs for |
+| `cache_dir` | platform cache | Intermediate JSON directory |
+| `output_folder` | `out` | Output directory for docs and figures |
+| `ai` | `off` | `on` / `off` for AI-generated descriptions |
+| `ai_workers` | `6` | Number of parallel AI workers for enrichment |
+| `format` | `docx` | Output format (`markdown`, `docx`) |
+| `group_by` | `file` | Group docs per `function` or per `file` |
+| `style` | `plain` | Call-graph style (`plain`/`slate`/`fearless`/`red` images, or `table` inline) |
+| `embedded_global_reference` | `no` | Embed renumbered type references (A_1, A_2, …) in each document |
+| `out_param_location` | `inputs` | Place out-only pointer params under inputs or outputs |
+| `verbose` | `false` | Enable debug logging |
+| `[ignore] calls` | `[]` | Function names to exclude from call graphs |
+| `[ignore] types` | `[]` | Type names to exclude from extraction |
+| `[ignore] kinds` | `[]` | Type kinds to exclude: struct, union, enum, typedef |
+| `[define] macros` | `[]` | Preprocessor macros to mark as defined |
+| `[sections] *` | all `true` | Set any section key to `false` to skip it in generated docs |
+
+Example:
 
 ```toml
 root_dir = "my-project"
@@ -105,14 +77,35 @@ types = ["noisy_type"]
 kinds = []
 ```
 
-CLI flags always override TOML values. See `examples/c/swift-doc.toml` for a worked example.
+## AI Configuration
 
-## Build Executable
+AI-powered descriptions are used when `ai = "on"`. The first run prompts you
+through an interactive onboarding (API key, base URL, model name); settings
+are then stored per-user and can be edited directly in that file:
+
+| OS | Path |
+|---|---|
+| Linux | `~/.config/swift-doc/config.json` |
+| macOS | `~/Library/Application Support/swift-doc/config.json` |
+| Windows | `%APPDATA%\swift-doc\config.json` |
+
+Keys: `api_key`, `base_url`, `model_name` (required); `temperature` (1.0),
+`max_tokens` (800), `retry_count` (1) (optional).
+
+## Windows Release
+
+The `Build Windows release` GitHub workflow produces an artifact containing:
+
+- `swift-doc.exe` — the single-file executable
+- `README.md`
+- `swift-doc.toml` — the template project config
+
+Build the exe locally with:
 
 ```bash
 pip install pyinstaller
 pyinstaller --name swift-doc --onefile --clean --paths src src/cli.py
-# dist/swift-doc  (or dist/swift-doc.exe on Windows)
+# dist/swift-doc.exe
 ```
 
 ## Running Tests

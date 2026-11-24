@@ -126,7 +126,7 @@ def run_docgen_phase(args):
             types_data = json.load(f)
     type_refs = types_data.get("type_references", {})
 
-    # ── Step 4: apply type filtering (--ignore-types, --ignore-kinds) ──
+    # ── Step 4: apply type filtering ([ignore] types, [ignore] kinds) ──
     ignore_types = getattr(args, "ignore_types", None)
     ignore_kinds = getattr(args, "ignore_kinds", [])
     if ignore_types or ignore_kinds:
@@ -162,7 +162,7 @@ def run_docgen_phase(args):
         logger.warning("No functions found under %s", analyse_dirs)
         return
 
-    # ── Step 6: apply call filtering (--ignore-calls) ──
+    # ── Step 6: apply call filtering ([ignore] calls) ──
     ignore_calls = getattr(args, "ignore_calls", None)
     if ignore_calls:
         ignored_c = set(ignore_calls)

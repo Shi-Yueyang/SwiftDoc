@@ -1,14 +1,14 @@
-import argparse
+import glob
+import json
 import logging
 import os
 import sys
-import tempfile
 import pytest
 
 from cli import (
     configure_logging,
     validate_paths,
-    build_parser,
+    run_from_config,
     main,
 )
 
@@ -66,365 +66,274 @@ class TestValidatePaths:
             validate_paths(tmp_dir, ["Z:\\nonexistent"])
 
 
-class TestBuildParser:
-    def test_parser_has_moduledesign_subcommand(self):
-        p = build_parser("/tmp/cache")
-        p.print_help()
-        ns = p.parse_args(["moduledesign", "/some/project"])
-        assert ns.command == "moduledesign"
-        assert ns.root_dir == "/some/project"
-        # argparse.SUPPRESS — attributes only exist when explicitly passed
-        assert not hasattr(ns, "ai")
-
-    def test_parser_has_config_subcommand(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["config-ai"])
-        assert ns.command == "config-ai"
-        assert ns.key is None
-        assert ns.value is None
-
-    def test_config_subcommand_with_key_value(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["config-ai", "temperature", "0.7"])
-        assert ns.key == "temperature"
-        assert ns.value == "0.7"
-
-    def test_moduledesign_defaults(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj"])
-        # argparse.SUPPRESS — unset attributes are absent
-        assert not hasattr(ns, "ai")
-        assert not hasattr(ns, "cache_dir")
-        assert not hasattr(ns, "output_folder")
-        assert not hasattr(ns, "analyse_dir")
-
-    def test_moduledesign_with_ai_on(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--ai", "on"])
-        assert ns.ai == "on"
-
-    def test_moduledesign_with_multiple_analyse_dirs(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--analyse_dir", "/proj/a", "--analyse_dir", "/proj/b"])
-        assert ns.analyse_dir == ["/proj/a", "/proj/b"]
-
-    def test_verbose_flag(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["--verbose", "moduledesign", "/proj"])
-        assert ns.verbose is True
-
-    def test_ignore_calls_flag(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--ignore-calls", "free", "--ignore-calls", "malloc"])
-        assert ns.ignore_calls == ["free", "malloc"]
-
-    def test_ignore_types_flag(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--ignore-types", "noisy_t"])
-        assert ns.ignore_types == ["noisy_t"]
-
-    def test_skip_sections_flag(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--skip-sections", "local_data,algorithm"])
-        assert ns.skip_sections == "local_data,algorithm"
-
-    def test_embedded_global_reference_flag_yes(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--embedded-global-reference", "yes"])
-        assert ns.embedded_global_reference == "yes"
-
-    def test_embedded_global_reference_flag_no(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--embedded-global-reference", "no"])
-        assert ns.embedded_global_reference == "no"
-
-    def test_embedded_global_reference_not_present_by_default(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj"])
-        assert not hasattr(ns, "embedded_global_reference")
-
-    def test_embedded_global_reference_rejects_invalid_value(self):
-        p = build_parser("/tmp/cache")
-        with pytest.raises(SystemExit):
-            p.parse_args(["moduledesign", "/proj", "--embedded-global-reference", "maybe"])
-
-    def test_out_param_location_defaults(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj"])
-        assert not hasattr(ns, "out_param_location")
-
-    def test_out_param_location_inputs(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--out-param-location", "inputs"])
-        assert ns.out_param_location == "inputs"
-
-    def test_out_param_location_outputs(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "/proj", "--out-param-location", "outputs"])
-        assert ns.out_param_location == "outputs"
-
-    def test_out_param_location_rejects_invalid_value(self):
-        p = build_parser("/tmp/cache")
-        with pytest.raises(SystemExit):
-            p.parse_args(["moduledesign", "/proj", "--out-param-location", "both"])
-
-    def test_parser_has_createconfig_subcommand(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["md-toml"])
-        assert ns.command == "md-toml"
-        assert ns.output == "swift-doc.toml"
-
-    def test_createconfig_custom_output(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["md-toml", "-o", "mycfg.toml"])
-        assert ns.output == "mycfg.toml"
-
-    def test_createconfig_long_output_flag(self):
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["md-toml", "--output", "/abs/path/cfg.toml"])
-        assert ns.output == "/abs/path/cfg.toml"
+@pytest.fixture
+def captured_phases(monkeypatch):
+    """Replace the pipeline phases with recorders and return the record dict."""
+    import cli
+    calls = {}
+    monkeypatch.setattr(cli, "run_extract_phase", lambda args: calls.__setitem__("extract", args))
+    monkeypatch.setattr(cli, "run_docgen_phase", lambda args: calls.__setitem__("docgen", args))
+    monkeypatch.setattr(cli, "configure_logging", lambda verbose=False: calls.__setitem__("verbose", verbose))
+    return calls
 
 
-class TestMain:
-    def test_config_set_key_value(self, tmp_path, monkeypatch, capsys):
-        config_path = tmp_path / "swift-doc" / "config.json"
-        monkeypatch.setattr("cli.set_config_value", lambda k, v, **kw: str(config_path))
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "config-ai", "temperature", "0.7"])
-        main()
-        captured = capsys.readouterr()
-        assert "Config updated: temperature = 0.7" in captured.out
+def _make_project(tmp_path):
+    """A tmp_path with a real C project dir and a configs dir beside it."""
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "main.c").write_text("int a(void) { return 1; }\n", encoding="utf-8")
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    return proj, cfg_dir
 
-    def test_config_set_invalid_key(self, monkeypatch, capsys):
-        def raise_val_err(k, v):
-            raise ValueError(f"Unknown config key: {k}")
-        monkeypatch.setattr("cli.set_config_value", raise_val_err)
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "config-ai", "bad_key", "val"])
+
+def _write_config(cfg_dir, text):
+    path = cfg_dir / "swift-doc.toml"
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
+class TestUsage:
+    """The single supported usage: swift-doc <config.toml>."""
+
+    def test_no_args_prints_usage_and_fails(self, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["swift-doc"])
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 1
+        assert "Usage:\n  swift-doc <config.toml>" in capsys.readouterr().err
 
-    def test_config_interactive(self, monkeypatch):
-        called = []
-        monkeypatch.setattr("cli.rerun_ai_config_interactive", lambda: called.append(True))
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "config-ai"])
-        main()
-        assert len(called) == 1
+    def test_help_prints_usage_and_exits_zero(self, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["swift-doc", "--help"])
+        main()  # no SystemExit
+        assert "Usage:\n  swift-doc <config.toml>" in capsys.readouterr().out
 
-    def test_moduledesign_validate_paths_fails(self, monkeypatch, tmp_path):
-        import cli as cli_module
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr(
-            "sys.argv",
-            ["cli.py", "moduledesign", "c", str(tmp_path), "--analyse_dir", "/nonexistent/path"],
+    def test_extra_args_rejected(self, tmp_path, monkeypatch, capsys):
+        cfg = _write_config(_make_project(tmp_path)[1], 'root_dir = "."\n')
+        monkeypatch.setattr("sys.argv", ["swift-doc", cfg, "--ai", "on"])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert "unexpected arguments" in captured.err
+        assert "TOML config" in captured.err
+
+    def test_non_toml_argument_rejected(self, tmp_path, monkeypatch, capsys):
+        proj = _make_project(tmp_path)[0]
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(proj)])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        assert "expected a .toml config file" in capsys.readouterr().err
+
+    def test_missing_config_file_errors(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["swift-doc", str(tmp_path / "nope.toml")])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        assert "config file not found" in capsys.readouterr().err
+
+
+class TestRunFromConfig:
+    def test_relative_paths_resolve_against_config_dir(self, tmp_path, captured_phases):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(
+            cfg_dir,
+            'root_dir = "../proj"\noutput_folder = "docs"\ncache_dir = "cache"\n',
+        )
+        run_from_config(cfg)
+        expected_root = os.path.normpath(os.path.join(str(cfg_dir), "..", "proj"))
+        extract = captured_phases["extract"]
+        docgen = captured_phases["docgen"]
+        assert extract.root_dir == expected_root
+        assert docgen.output_folder == os.path.normpath(os.path.join(str(cfg_dir), "docs"))
+        assert docgen.cache_dir == os.path.normpath(os.path.join(str(cfg_dir), "cache"))
+
+    def test_absolute_paths_pass_through(self, tmp_path, captured_phases):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(
+            cfg_dir,
+            f'root_dir = {json.dumps(str(proj))}\noutput_folder = {str(tmp_path / "out")!r}\n',
+        )
+        run_from_config(cfg)
+        assert captured_phases["extract"].root_dir == str(proj)
+        assert captured_phases["docgen"].output_folder == str(tmp_path / "out")
+
+    def test_root_dir_required(self, tmp_path, captured_phases, capsys):
+        _, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, 'format = "docx"\n')
+        with pytest.raises(SystemExit) as exc:
+            run_from_config(cfg)
+        assert exc.value.code == 1
+        assert "root_dir is required" in capsys.readouterr().err
+
+    def test_unknown_document_type_errors(self, tmp_path, captured_phases, capsys):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, f'type = "apidoc"\nroot_dir = {json.dumps(str(proj))}\n')
+        with pytest.raises(SystemExit) as exc:
+            run_from_config(cfg)
+        assert exc.value.code == 1
+        assert "unknown document type 'apidoc'" in capsys.readouterr().err
+
+    def test_builtin_defaults_applied(self, tmp_path, captured_phases):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, f'root_dir = {json.dumps(str(proj))}\n')
+        run_from_config(cfg)
+        extract = captured_phases["extract"]
+        docgen = captured_phases["docgen"]
+        assert docgen.format == "docx"
+        assert docgen.group_by == "file"
+        assert docgen.style == "plain"
+        assert extract.ai == "off"
+        assert extract.ai_workers == 6
+        assert docgen.out_param_location == "inputs"
+        assert docgen.embedded_global_reference == "no"
+        # output_folder default resolves next to the config file
+        assert docgen.output_folder == os.path.normpath(os.path.join(str(cfg_dir), "out"))
+        # analyse_dirs falls back to root_dir
+        assert docgen.analyse_dirs == [str(proj)]
+
+    def test_toml_options_passed_through(self, tmp_path, captured_phases):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(
+            cfg_dir,
+            "\n".join([
+                f'root_dir = {json.dumps(str(proj))}',
+                'format = "markdown"',
+                'group_by = "function"',
+                'style = "table"',
+                'ai = "off"',
+                "ai_workers = 3",
+                'embedded_global_reference = "yes"',
+                'out_param_location = "outputs"',
+                "[ignore]",
+                'calls = ["free", "malloc"]',
+                'types = ["WORD"]',
+                'kinds = ["typedef"]',
+                "[define]",
+                'macros = ["DEBUG"]',
+                "[sections]",
+                "algorithm = false",
+            ]) + "\n",
+        )
+        run_from_config(cfg)
+        extract = captured_phases["extract"]
+        docgen = captured_phases["docgen"]
+        assert extract.ai_workers == 3
+        assert extract.defines == {"DEBUG"}
+        assert docgen.format == "markdown"
+        assert docgen.group_by == "function"
+        assert docgen.style == "table"
+        assert docgen.ignore_calls == {"free", "malloc"}
+        assert docgen.ignore_types == {"WORD"}
+        assert docgen.ignore_kinds == ["typedef"]
+        assert docgen.embedded_global_reference == "yes"
+        assert docgen.out_param_location == "outputs"
+        assert docgen.sections["algorithm"] is False
+        assert docgen.sections["interface"] is True
+
+    def test_analyse_dirs_resolved_against_root_dir(self, tmp_path, captured_phases):
+        proj, cfg_dir = _make_project(tmp_path)
+        (proj / "bsw").mkdir()
+        cfg = _write_config(
+            cfg_dir,
+            f'root_dir = {json.dumps(str(proj))}\nanalyse_dirs = ["bsw"]\n',
+        )
+        run_from_config(cfg)
+        assert captured_phases["docgen"].analyse_dirs == [
+            os.path.normpath(os.path.join(str(proj), "bsw"))]
+
+    def test_analyse_dir_outside_root_dir_fails(self, tmp_path, captured_phases, capsys):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(
+            cfg_dir,
+            f'root_dir = {json.dumps(str(proj))}\nanalyse_dirs = ["../cfg"]\n',
         )
         with pytest.raises(SystemExit) as exc:
-            main()
-        assert exc.value.code != 0
-
-    def test_createconfig_creates_file(self, tmp_path, monkeypatch, capsys):
-        output = tmp_path / "swift-doc.toml"
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "md-toml", "-o", str(output)])
-        main()
-        captured = capsys.readouterr()
-        assert output.exists()
-        content = output.read_text(encoding="utf-8")
-        assert content.startswith("# swift-doc.toml")
-        assert "root_dir" in content
-        assert "[ignore]" in content
-        assert "[define]" in content
-        assert "[sections]" in content
-        assert "Created config file:" in captured.out
-        assert str(output) in captured.out
-
-    def test_createconfig_fails_if_output_exists(self, tmp_path, monkeypatch, capsys):
-        output = tmp_path / "existing.toml"
-        output.write_text("# already here\n", encoding="utf-8")
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "md-toml", "-o", str(output)])
-        with pytest.raises(SystemExit) as exc:
-            main()
+            run_from_config(cfg)
         assert exc.value.code == 1
-        captured = capsys.readouterr()
-        assert "already exists" in captured.err
-        assert output.read_text(encoding="utf-8") == "# already here\n"
+        assert "must be inside root_dir" in capsys.readouterr().err
 
-    def test_createconfig_default_output_path(self, monkeypatch, tmp_path, capsys):
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("sys.argv", ["cli.py", "md-toml"])
-        monkeypatch.chdir(tmp_path)
-        main()
-        captured = capsys.readouterr()
-        expected = os.path.join(str(tmp_path), "swift-doc.toml")
-        assert os.path.isfile(expected)
-        assert "Created config file:" in captured.out
-        assert expected in captured.out
-
-
-class TestDirectoryShortcut:
-    """Tests for the swift-doc <folder> directory shortcut."""
-
-    def test_folder_with_toml_auto_fills_root_dir(self, tmp_path, monkeypatch):
-        d = tmp_path / "myproject"
-        d.mkdir()
-        (d / "swift-doc.toml").write_text("# minimal config\n", encoding="utf-8")
-
-        captured_override = {}
-
-        def fake_run(cli_args, toml_config_override=None):
-            captured_override["override"] = toml_config_override
-
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("cli._run_moduledesign", fake_run)
-        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
-
-        main()
-
-        override = captured_override["override"]
-        assert override is not None
-        assert override["root_dir"] == os.path.abspath(str(d))
-
-    def test_folder_with_toml_auto_fills_output_folder(self, tmp_path, monkeypatch):
-        d = tmp_path / "myproject"
-        d.mkdir()
-        (d / "swift-doc.toml").write_text("# minimal\n", encoding="utf-8")
-
-        captured_override = {}
-
-        def fake_run(cli_args, toml_config_override=None):
-            captured_override["override"] = toml_config_override
-
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("cli._run_moduledesign", fake_run)
-        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
-
-        main()
-
-        override = captured_override["override"]
-        assert override is not None
-        output = override["output_folder"]
-        prefix = os.path.abspath(str(d)) + os.sep + "moduledesign_"
-        assert output.startswith(prefix)
-        # timestamp part: YYYY-MM-DD_HHMMSS (17 chars)
-        ts_part = output[len(prefix):]
-        import re
-        assert re.match(r"^\d{4}-\d{2}-\d{2}_\d{6}$", ts_part)
-
-    def test_folder_with_toml_preserves_existing_root_dir(self, tmp_path, monkeypatch):
-        d = tmp_path / "myproject"
-        d.mkdir()
-        (d / "swift-doc.toml").write_text('root_dir = "src"\n', encoding="utf-8")
-
-        captured_override = {}
-
-        def fake_run(cli_args, toml_config_override=None):
-            captured_override["override"] = toml_config_override
-
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("cli._run_moduledesign", fake_run)
-        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
-
-        main()
-
-        override = captured_override["override"]
-        expected = os.path.normpath(os.path.join(str(d), "src"))
-        assert override["root_dir"] == expected
-
-    def test_folder_with_toml_preserves_existing_output_folder(self, tmp_path, monkeypatch):
-        d = tmp_path / "myproject"
-        d.mkdir()
-        (d / "swift-doc.toml").write_text('output_folder = "my_docs"\n', encoding="utf-8")
-
-        captured_override = {}
-
-        def fake_run(cli_args, toml_config_override=None):
-            captured_override["override"] = toml_config_override
-
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("cli._run_moduledesign", fake_run)
-        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
-
-        main()
-
-        override = captured_override["override"]
-        assert override["output_folder"] == "my_docs"
-
-    def test_folder_without_toml_errors(self, tmp_path, monkeypatch, capsys):
-        d = tmp_path / "empty_project"
-        d.mkdir()
-
-        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
-
+    @pytest.mark.parametrize("key,value", [
+        ("format", '"pdf"'),
+        ("style", '"neon"'),
+        ("group_by", '"folder"'),
+        ("ai", '"maybe"'),
+        ("out_param_location", '"both"'),
+        ("embedded_global_reference", '"maybe"'),
+    ])
+    def test_invalid_choice_errors(self, tmp_path, captured_phases, capsys, key, value):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, f'root_dir = {json.dumps(str(proj))}\n{key} = {value}\n')
         with pytest.raises(SystemExit) as exc:
-            main()
+            run_from_config(cfg)
         assert exc.value.code == 1
-        captured = capsys.readouterr()
-        assert "swift-doc.toml" in captured.err
+        assert f"invalid {key}" in capsys.readouterr().err
 
-    def test_folder_with_verbose_reorders_argv(self, tmp_path, monkeypatch):
-        d = tmp_path / "myproject"
-        d.mkdir()
-        (d / "swift-doc.toml").write_text("# minimal\n", encoding="utf-8")
+    def test_invalid_ai_workers_errors(self, tmp_path, captured_phases, capsys):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, f'root_dir = {json.dumps(str(proj))}\nai_workers = "many"\n')
+        with pytest.raises(SystemExit) as exc:
+            run_from_config(cfg)
+        assert exc.value.code == 1
+        assert "ai_workers must be an integer" in capsys.readouterr().err
 
-        captured_argv = {}
+    def test_verbose_toml_key_drives_logging(self, tmp_path, captured_phases):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, f'root_dir = {json.dumps(str(proj))}\nverbose = true\n')
+        run_from_config(cfg)
+        assert captured_phases["verbose"] is True
 
-        def fake_run(cli_args, toml_config_override=None):
-            captured_argv["argv"] = list(sys.argv)
+    def test_verbose_defaults_to_false(self, tmp_path, captured_phases):
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, f'root_dir = {json.dumps(str(proj))}\n')
+        run_from_config(cfg)
+        assert captured_phases["verbose"] is False
 
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("cli._run_moduledesign", fake_run)
-        monkeypatch.setattr("sys.argv", ["swift-doc", str(d), "--verbose"])
-
-        main()
-
-        argv = captured_argv["argv"]
-        verbose_idx = argv.index("--verbose")
-        md_idx = argv.index("md")
-        assert verbose_idx < md_idx
-        assert str(d) in argv
-
-    def test_folder_passes_toml_override(self, tmp_path, monkeypatch):
-        d = tmp_path / "myproject"
-        d.mkdir()
-        (d / "swift-doc.toml").write_text('style = "table"\n', encoding="utf-8")
-
-        captured = {}
-
-        def fake_run(cli_args, toml_config_override=None):
-            captured["override"] = toml_config_override
-            captured["called"] = True
-
-        monkeypatch.setattr("cli.configure_logging", lambda verbose: None)
-        monkeypatch.setattr("cli._run_moduledesign", fake_run)
-        monkeypatch.setattr("sys.argv", ["swift-doc", str(d)])
-
-        main()
-
-        assert captured.get("called")
-        override = captured["override"]
-        assert override is not None
-        assert override["style"] == "table"
-        assert override["root_dir"] == os.path.abspath(str(d))
+    def test_ai_on_triggers_onboarding(self, tmp_path, monkeypatch):
+        import cli
+        proj, cfg_dir = _make_project(tmp_path)
+        cfg = _write_config(cfg_dir, f'root_dir = {json.dumps(str(proj))}\nai = "on"\n')
+        called = []
+        monkeypatch.setattr(cli, "ensure_ai_config_interactive", lambda: called.append(True))
+        monkeypatch.setattr(cli, "run_extract_phase", lambda args: None)
+        monkeypatch.setattr(cli, "run_docgen_phase", lambda args: None)
+        monkeypatch.setattr(cli, "configure_logging", lambda verbose=False: None)
+        run_from_config(cfg)
+        assert called == [True]
 
 
-
-class TestRelativeDirectoryRoot:
-    """Regression: a relative directory positional must be absolutized,
-    otherwise analyse_dirs fallback joins the root with itself
-    (e.g. 'examples/c' -> 'examples/c/examples/c') and docgen filters
-    every file out."""
-
-    def test_relative_dir_positional_is_absolutized(self, tmp_path, monkeypatch):
-        from cli import _resolve_config_and_root, build_parser
+class TestEndToEnd:
+    def test_main_on_small_markdown_project(self, tmp_path, monkeypatch):
         proj = tmp_path / "proj"
         proj.mkdir()
-        (proj / "a.c").write_text("int a(void) { return 1; }\n", encoding="utf-8")
+        (proj / "types.h").write_text(
+            "typedef struct { int x; int y; } Point;\n",
+            encoding="utf-8",
+        )
+        (proj / "main.c").write_text(
+            "int helper(void) { return 2; }\n"
+            "Point g_origin;\n"
+            "Point a(void) { helper(); return g_origin; }\n",
+            encoding="utf-8",
+        )
+        cfg = tmp_path / "swift-doc.toml"
+        cfg.write_text(
+            "\n".join([
+                f'root_dir = "{proj.name}"',
+                'format = "markdown"',
+                'style = "table"',
+                'ai = "off"',
+                'output_folder = "docs_out"',
+                'cache_dir = "cache_out"',
+            ]) + "\n",
+            encoding="utf-8",
+        )
         monkeypatch.chdir(tmp_path)
-
-        p = build_parser("/tmp/cache")
-        ns = p.parse_args(["moduledesign", "proj"])
-        root_dir, _cfg = _resolve_config_and_root(ns)
-        assert root_dir == os.path.abspath("proj")
+        monkeypatch.setattr("sys.argv", ["swift-doc", "swift-doc.toml"])
+        main()
+        docs = tmp_path / "docs_out"
+        assert docs.is_dir()
+        md_files = glob.glob(str(docs / "*.md"))
+        assert md_files, "no markdown docs generated"
+        assert any("appendix" in os.path.basename(p) for p in md_files)

@@ -11,7 +11,7 @@ See [README.md](README.md) for build, test, and CLI commands.
 **Two-phase pipeline** orchestrated by `pipeline.py`:
 
 1. **Extract phase** (`run_extract_phase`): Walks the source tree, parses source files with tree-sitter, extracts globals/types/functions, optionally enriches with AI descriptions, and writes JSON caches to the cache dir. Cache stores COMPLETE data — no filtering here.
-2. **Docgen phase** (`run_docgen_phase`): Reads cached JSON, filters functions by `--analyse_dir`, applies `--ignore-calls`/`--ignore-types` filtering at docgen time (cache stays untainted), generates docs and call-graph PNGs.
+2. **Docgen phase** (`run_docgen_phase`): Reads cached JSON, filters functions by `analyse_dirs`, applies `ignore_calls`/`ignore_types` filtering at docgen time (cache stays untainted), generates docs and call-graph PNGs.
 
 **Parsers** (`parsers/`): swift-doc is C-only. `CParser` (`parsers/c/`, re-exported from `parsers/__init__.py`) provides `extract_functions()`, `extract_globals()`, and `extract_types()`; `pipeline.run_extract_phase` instantiates it directly. There is no language registry or `--lang` flag.
 
@@ -28,9 +28,9 @@ See [README.md](README.md) for build, test, and CLI commands.
 
 **Config** (`config/`):
 - `manager.py` — AI config stored per-platform in `swift-doc/config.json` (Windows: `%APPDATA%\swift-doc\`, macOS: `~/Library/Application Support/swift-doc/`, Linux: `~/.config/swift-doc/`). Required keys: `api_key`, `base_url`, `model_name`. Optional: `temperature` (default 1.0), `max_tokens` (default 800), `retry_count` (default 1). `STATE_DIR` is the config directory path. `APP_DIR_NAME = "swift-doc"`.
-- `toml_config.py` — Project-level TOML config (`swift-doc.toml`). `load_toml(path)` parses a config file, `find_config(dir)` looks for `swift-doc.toml` in a directory. `DEFAULT_CONFIG_NAME = "swift-doc.toml"`.
+- `toml_config.py` — Project-level TOML config (`swift-doc.toml`). `load_toml(path)` parses a config file into a flat dict; `DEFAULT_CONFIG_TEMPLATE` is the documented template shipped in the Windows release artifact. `DEFAULT_CONFIG_NAME = "swift-doc.toml"` is the conventional config filename. AI config for `ai = "on"` comes from `manager.py` (per-user `config.json`); first run with `ai = "on"` triggers interactive onboarding via `ensure_ai_config_interactive()` — there is no separate config CLI command.
 
-**Call-graph rendering** (`generators/images.py`): Two `--style` options:
+**Call-graph rendering** (`generators/images.py`): `style` TOML option:
 - `"plain"` (default) — Pillow-rendered black/white, no shadows, sharp edges, thin lines
 - `"table"` — embeds a two-column markdown/docx table (Callers | Callees) directly in the document. Self-calls are filtered out.
 
@@ -40,14 +40,9 @@ Long function names use `_wrap_text()` (underscore-aware line breaking) instead 
 
 ## TOML Project Config (`swift-doc.toml`)
 
-Placed in project root. Holds all CLI params. Resolution: **CLI args > TOML > built-in defaults**.
+**Single usage:** `swift-doc <config.toml>` — the TOML config file is the only way to pass options; there are no CLI flags or subcommands. Entry logic in `cli.py:run_from_config()`. Resolution: **TOML > built-in defaults** (`cli.py:_DEFAULTS`), with per-option validation against `cli.py:_CHOICES` and a friendly error on bad values. `cli.py main()` rejects anything but exactly one `.toml` path argument.
 
-Discovery flow in `cli.py:_resolve_config_and_root()`:
-- Positional ends with `.toml` → load that file, `root_dir` must be in TOML
-- Positional is a file (e.g. `foo.c`) → parent dir = root_dir, file = auto `analyse_dir`
-- Positional is a directory → use as root_dir, look for `swift-doc.toml` inside
-- No positional → look for `swift-doc.toml` in CWD
-- Nothing found → error and exit
+Path semantics (drag-and-drop friendly): relative `root_dir`, `output_folder`, `cache_dir` resolve against the config file's directory; `analyse_dirs` entries resolve against `root_dir`. `verbose = true` in TOML enables debug logging.
 
 Example:
 ```toml
@@ -63,20 +58,20 @@ types = ["noisy_type"]
 kinds = []
 ```
 
-CLI uses `argparse.SUPPRESS` for all moduledesign-command arguments so we can distinguish "not passed" from "passed with default value." Merge happens in `cli.py:_resolve()`.
+`DEFAULT_CONFIG_TEMPLATE` in `config/toml_config.py` is the canonical template; the Windows release workflow ships it as `swift-doc.toml` in the build artifact.
 
 ## Ignore Filtering
 
-- `--ignore-calls` / `[ignore] calls` — filters function names from `calls` lists (not `called_by`). Applied at **docgen time** — cache stores complete data.
-- `--ignore-types` / `[ignore] types` — strips type names from `type_refs` and clears `type_ref` on global-variable inputs. Applied at **docgen time**.
-- `--ignore-kinds` / `[ignore] kinds` — drops types whose `kind` field matches. C kinds: struct, union, enum, typedef. Default: empty (no filtering). Applied at **docgen time**.
+- `[ignore] calls` — filters function names from `calls` lists (not `called_by`). Applied at **docgen time** — cache stores complete data.
+- `[ignore] types` — strips type names from `type_refs` and clears `type_ref` on global-variable inputs. Applied at **docgen time**.
+- `[ignore] kinds` — drops types whose `kind` field matches. C kinds: struct, union, enum, typedef. Default: empty (no filtering). Applied at **docgen time**.
 - Hardcoded baseline at extraction time: `_IGNORED_CALLS = {"memcpy", "memset"}` in `parsers/c/functions.py` — these are always filtered.
 
 ## Key Conventions
 
 - Cache JSON files are named `{folder_name}_{global_variables|functions|global_types}.json` where `folder_name` is the basename of the project root.
 - Function identity key is `(name, file)` tuple — allows static functions in different translation units to coexist.
-- The `--ai` flag accepts `"on"` or `"off"` (default: `"off"`).
+- The `ai` TOML key accepts `"on"` or `"off"` (default: `"off"`).
 - Encoding: files are decoded with chardet detection; `gb18030` is the fallback for Chinese-encoded source.
 - `examples/c/` is a sample C project used for both manual testing and as a reference.
 - ANSI color output is gated on `sys.stderr.isatty()` for piped/redirected usage.
@@ -90,11 +85,11 @@ CLI uses `argparse.SUPPRESS` for all moduledesign-command arguments so we can di
 
 **Run the full suite before declaring done.** `pytest tests/ -q` must pass. If changing defaults, check that no existing test silently depends on the old default.
 
-**Verify end-to-end for behavior changes.** Run `swift-doc moduledesign examples/c --ai off` and inspect the output when touching extraction, generation, or filtering code. A passing unit test doesn't always catch a broken pipeline.
+**Verify end-to-end for behavior changes.** Run `swift-doc examples/c/swift-doc.toml` (with `ai = "off"`) and inspect the output when touching extraction, generation, or filtering code. A passing unit test doesn't always catch a broken pipeline.
 
 **Match existing patterns.** Follow the code style, naming, and structure already in the file you're editing. New test helpers mirror `parse_c_code()` / `find_first_function_node()` in `test_module_analysis.py`. New config keys follow the `OPTIONAL_CONFIG_JSON_MAP` pattern.
 
-**Cache is source-of-truth.** Extraction produces complete, unfiltered data. Filtering (`--ignore-calls`, `--ignore-types`) happens at docgen time only. Never bake presentation concerns into the cache JSON.
+**Cache is source-of-truth.** Extraction produces complete, unfiltered data. Filtering (`[ignore] calls`, `[ignore] types`) happens at docgen time only. Never bake presentation concerns into the cache JSON.
 
 **No backward-compatibility cruft.** Don't keep dual-mode APIs (file-path vs. in-memory) when only one mode has callers. If a parameter or code path is dead, delete it. Single-purpose, clean signatures over "might be useful later" flexibility.
 

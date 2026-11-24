@@ -477,7 +477,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup, defines
     code = raw.decode(encoding, errors="ignore")
     raw_code = code  # keep raw source before preprocessing
 
-    # ── preprocess: resolve #ifdef / #ifndef based on --define flags ──
+    # ── preprocess: resolve #ifdef / #ifndef based on [define] macros ──
     code = preprocess_c_code(code, defines)
 
     tree = parser.parse(bytes(code, "utf8"))
@@ -514,7 +514,7 @@ def extract_functions_from_c_file(c_file_path, type_refs, global_lookup, defines
                 snippet = "(empty)"
             lines.append("  error %d (line %d):" % (i, lineno))
             lines.append("    %s" % snippet)
-        lines.append("  hint: try --define to activate guarded preprocessor regions")
+        lines.append("  hint: list the guarding macros under [define] macros in your swift-doc.toml")
         logger.warning("\n".join(lines))
 
     # ── augment with raw-source line numbers and conditional macros ─────

@@ -15,7 +15,6 @@ from config.manager import (
     get_missing_ai_keys,
     resolve_ai_config,
     save_user_config,
-    set_config_value,
     _normalize_config,
     _normalize_optional_config,
     _read_json_file,
@@ -247,37 +246,3 @@ class TestSaveUserConfig:
             data = json.load(f)
         assert data["api_key"] == "new"
         assert data["temperature"] == 0.9
-
-
-class TestSetConfigValue:
-    def test_sets_required_key(self, tmp_path):
-        config_path = tmp_path / "config.json"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text("{}")
-        result = set_config_value("api_key", "my-key", config_path)
-        with open(config_path) as f:
-            data = json.load(f)
-        assert data["api_key"] == "my-key"
-
-    def test_sets_optional_key_with_type_conversion(self, tmp_path):
-        config_path = tmp_path / "config.json"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text("{}")
-        result = set_config_value("temperature", "0.5", config_path)
-        with open(config_path) as f:
-            data = json.load(f)
-        assert data["temperature"] == 0.5
-
-    def test_rejects_unknown_key(self, tmp_path):
-        config_path = tmp_path / "config.json"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text("{}")
-        with pytest.raises(ValueError, match="Unknown config key"):
-            set_config_value("nonexistent_key", "value", config_path)
-
-    def test_rejects_invalid_type(self, tmp_path):
-        config_path = tmp_path / "config.json"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text("{}")
-        with pytest.raises(ValueError, match="Invalid value"):
-            set_config_value("max_tokens", "not_an_integer", config_path)

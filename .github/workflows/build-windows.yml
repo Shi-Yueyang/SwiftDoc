@@ -35,8 +35,22 @@ jobs:
             --noconfirm `
             src/cli.py
 
+      - name: Assemble release bundle
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item dist/swift-doc.exe release/swift-doc.exe
+          Copy-Item README.md release/README.md
+          python -c "from config.toml_config import DEFAULT_CONFIG_TEMPLATE; open('release/swift-doc.toml', 'w', encoding='utf-8').write(DEFAULT_CONFIG_TEMPLATE)"
+
+      - name: Verify bundle contents
+        run: |
+          Get-ChildItem release
+          foreach ($f in @('swift-doc.exe', 'README.md', 'swift-doc.toml')) {
+            if (-not (Test-Path "release/$f")) { throw "missing release/$f" }
+          }
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: swift-doc-windows
-          path: dist/
+          path: release/
